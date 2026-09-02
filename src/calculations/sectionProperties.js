@@ -1,161 +1,220 @@
+/**
+ * Calculate geometric properties of a CFS C-section.
+ *
+ * Geometry:
+ *
+ *      ┌──────────────┐
+ *      │              │  ← Top flange + lip
+ *      │
+ *      │
+ *      │              │
+ *      └──────────────┘  ← Bottom flange + lip
+ *
+ * The section is treated as a sharp-cornered section
+ * when radius = 0.
+ *
+ * Dimensions:
+ *   h = web length
+ *   b = flange width
+ *   c = lip length
+ *   t = thickness
+ *
+ * Units:
+ *   Length  = mm
+ *   Area    = mm²
+ *   Inertia = mm⁴
+ */
+
 export function calculateSectionProperties(section) {
-  const h = Number(section.webLength) || 0;
-  const b = Number(section.flangeWidth) || 0;
-  const c = Number(section.lipLength) || 0;
-  const t = Number(section.thickness) || 0;
-  const r = Number(section.radius) || 0;
+  const h = Number(section.webLength);
+  const b = Number(section.flangeWidth);
+  const c = Number(section.lipLength);
+  const t = Number(section.thickness);
+  const radius = Number(section.radius) || 0;
 
   // ------------------------------------------------------------
-  // TEMPORARY THIN-WALLED C-SECTION MODEL
-  // ------------------------------------------------------------
-  //
-  // This is only a preliminary calculation model.
-  // We will replace this with the exact geometry/equations
-  // from your calculation PDF before using the results.
-  //
+  // INPUT VALIDATION
   // ------------------------------------------------------------
 
-  const webArea = h * t;
-
-  const topFlangeArea = b * t;
-  const bottomFlangeArea = b * t;
-
-  const topLipArea = c * t;
-  const bottomLipArea = c * t;
-
-  const area =
-    webArea +
-    topFlangeArea +
-    bottomFlangeArea +
-    topLipArea +
-    bottomLipArea;
-
-  // Prevent division by zero
-  if (area === 0) {
-    return {
-      area: 0,
-      centroidX: 0,
-      centroidY: 0,
-      ix: 0,
-      iy: 0,
-      radius: r,
-    };
+  if (
+    !Number.isFinite(h) ||
+    !Number.isFinite(b) ||
+    !Number.isFinite(c) ||
+    !Number.isFinite(t)
+  ) {
+    return null;
   }
+
+  if (h <= 0 || b <= 0 || c < 0 || t <= 0) {
+    return null;
+  }
+
+  if (t >= h || t >= b) {
+    return null;
+  }
+
+  /*
+   * Current calculation assumes sharp corners.
+   *
+   * Radius will be incorporated separately when we implement
+   * rounded-corner geometry.
+   */
+  if (radius !== 0) {
+    console.warn(
+      "Corner radius is currently not included in the section property calculation."
+    );
+  }
+
+  // ------------------------------------------------------------
+  // RECTANGULAR COMPONENTS
+  // ------------------------------------------------------------
+  //
+  // We divide the C-section into 5 non-overlapping rectangles:
+  //
+  // 1. Web
+  // 2. Top flange
+  // 3. Bottom flange
+  // 4. Top lip
+  // 5. Bottom lip
+  //
+  // This avoids double-counting material at the intersections.
+  // ------------------------------------------------------------
+
+  const rectangles = [
+    {
+      name: "Web",
+
+      width: t,
+      height: h,
+
+      // centroid coordinates
+      x: t / 2,
+      y: h / 2,
+    },
+
+    {
+      name: "Top Flange",
+
+      width: b - t,
+      height: t,
+
+      x: t + (b - t) / 2,
+      y: h - t / 2,
+    },
+
+    {
+      name: "Bottom Flange",
+
+      width: b - t,
+      height: t,
+
+      x: t + (b - t) / 2,
+      y: t / 2,
+    },
+
+    {
+      name: "Top Lip",
+
+      width: t,
+      height: c,
+
+      x: b - t / 2,
+      y: h - t - c / 2,
+    },
+
+    {
+      name: "Bottom Lip",
+
+      width: t,
+      height: c,
+
+      x: b - t / 2,
+      y: t + c / 2,
+    },
+  ];
+
+  // ------------------------------------------------------------
+  // AREA
+  // ------------------------------------------------------------
+
+  rectangles.forEach((rect) => {
+    rect.area = rect.width * rect.height;
+  });
+
+  const area = rectangles.reduce(
+    (sum, rect) => sum + rect.area,
+    0
+  );
 
   // ------------------------------------------------------------
   // CENTROID
   // ------------------------------------------------------------
 
-  /*
-   * Coordinate system:
-   *
-   * X → from left side of web
-   * Y → from top of section
-   */
-
-  const webX = t / 2;
-  const webY = h / 2;
-
-  const topFlangeX = b / 2;
-  const topFlangeY = t / 2;
-
-  const bottomFlangeX = b / 2;
-  const bottomFlangeY = h - t / 2;
-
-  const topLipX = b - t / 2;
-  const topLipY = c / 2;
-
-  const bottomLipX = b - t / 2;
-  const bottomLipY = h - c / 2;
-
   const centroidX =
-    (
-      webArea * webX +
-      topFlangeArea * topFlangeX +
-      bottomFlangeArea * bottomFlangeX +
-      topLipArea * topLipX +
-      bottomLipArea * bottomLipX
+    rectangles.reduce(
+      (sum, rect) => sum + rect.area * rect.x,
+      0
     ) / area;
 
   const centroidY =
-    (
-      webArea * webY +
-      topFlangeArea * topFlangeY +
-      bottomFlangeArea * bottomFlangeY +
-      topLipArea * topLipY +
-      bottomLipArea * bottomLipY
+    rectangles.reduce(
+      (sum, rect) => sum + rect.area * rect.y,
+      0
     ) / area;
 
   // ------------------------------------------------------------
   // MOMENT OF INERTIA
   // ------------------------------------------------------------
   //
-  // Preliminary rectangular-component calculation.
+  // Rectangle centroidal inertias:
   //
-  // This will later be replaced/expanded to account for the
-  // exact bent geometry and radius.
+  // Ix = b h³ / 12
+  // Iy = h b³ / 12
+  //
+  // Parallel axis theorem:
+  //
+  // Ix = Ix_local + A(dy)²
+  // Iy = Iy_local + A(dx)²
   // ------------------------------------------------------------
 
-  const webIx =
-    (t * Math.pow(h, 3)) / 12 +
-    webArea * Math.pow(webY - centroidY, 2);
+  let Ix = 0;
+  let Iy = 0;
 
-  const webIy =
-    (h * Math.pow(t, 3)) / 12 +
-    webArea * Math.pow(webX - centroidX, 2);
+  rectangles.forEach((rect) => {
+    const IxLocal =
+      (rect.width * Math.pow(rect.height, 3)) / 12;
 
-  const topFlangeIx =
-    (b * Math.pow(t, 3)) / 12 +
-    topFlangeArea * Math.pow(topFlangeY - centroidY, 2);
+    const IyLocal =
+      (rect.height * Math.pow(rect.width, 3)) / 12;
 
-  const topFlangeIy =
-    (t * Math.pow(b, 3)) / 12 +
-    topFlangeArea * Math.pow(topFlangeX - centroidX, 2);
+    const dx = rect.x - centroidX;
+    const dy = rect.y - centroidY;
 
-  const bottomFlangeIx =
-    (b * Math.pow(t, 3)) / 12 +
-    bottomFlangeArea * Math.pow(bottomFlangeY - centroidY, 2);
+    Ix += IxLocal + rect.area * Math.pow(dy, 2);
+    Iy += IyLocal + rect.area * Math.pow(dx, 2);
+  });
 
-  const bottomFlangeIy =
-    (t * Math.pow(b, 3)) / 12 +
-    bottomFlangeArea * Math.pow(bottomFlangeX - centroidX, 2);
+  // ------------------------------------------------------------
+  // RADIUS
+  // ------------------------------------------------------------
 
-  const topLipIx =
-    (t * Math.pow(c, 3)) / 12 +
-    topLipArea * Math.pow(topLipY - centroidY, 2);
-
-  const topLipIy =
-    (c * Math.pow(t, 3)) / 12 +
-    topLipArea * Math.pow(topLipX - centroidX, 2);
-
-  const bottomLipIx =
-    (t * Math.pow(c, 3)) / 12 +
-    bottomLipArea * Math.pow(bottomLipY - centroidY, 2);
-
-  const bottomLipIy =
-    (c * Math.pow(t, 3)) / 12 +
-    bottomLipArea * Math.pow(bottomLipX - centroidX, 2);
-
-  const ix =
-    webIx +
-    topFlangeIx +
-    bottomFlangeIx +
-    topLipIx +
-    bottomLipIx;
-
-  const iy =
-    webIy +
-    topFlangeIy +
-    bottomFlangeIy +
-    topLipIy +
-    bottomLipIy;
+  /*
+   * For now radius = 0 is the intended calculation.
+   *
+   * We return it so the rest of the application knows which
+   * geometry was used.
+   */
 
   return {
     area,
     centroidX,
     centroidY,
-    ix,
-    iy,
-    radius: r,
+    Ix,
+    Iy,
+
+    radius,
+
+    // Useful for debugging / future calculations
+    rectangles,
   };
 }

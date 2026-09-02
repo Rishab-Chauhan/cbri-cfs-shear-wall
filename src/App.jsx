@@ -1,173 +1,367 @@
 import { useState } from "react";
 
-import SectionInput from "./components/SectionInput";
-import SectionDrawing from "./components/SectionDrawing";
-import SectionProperties from "./components/SectionProperties";
 import ShearWallParameters from "./components/ShearWallParameters";
 import Results from "./components/Results";
 
+import {
+  calculateScrewLayout,
+} from "./calculations/screwLayout";
+
+import {
+  calculateLateralStrength,
+} from "./calculations/lateralStrength";
+
 function App() {
-  // ============================================================
-  // SECTION GEOMETRY
-  // ============================================================
-
-  const [section, setSection] = useState({
-    webLength: 200,
-    flangeWidth: 50,
-    lipLength: 20,
-    thickness: 1.12,
-    radius: 0,
-  });
-
-  // Handle section input changes
-  const handleSectionChange = (field, value) => {
-    setSection((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-
-  // ============================================================
-  // SHEAR WALL PARAMETERS
-  // ============================================================
-
   const [parameters, setParameters] = useState({
-    // ----------------------------------------------------------
-    // STEEL PROPERTIES
-    // ----------------------------------------------------------
+  /* ================================
+     PANEL
+  ================================= */
 
-    fySteel: 230,
-    fuSteel: 344,
-    eSteel: 203000,
-    tF: 1.12,
+  panelHeight: 2438,
+  panelLength: 1219,
 
-    // ----------------------------------------------------------
-    // SHEATHING PROPERTIES
-    // ----------------------------------------------------------
 
-    tS: 12.5,
-    fuSheathing: 4.5,
-    eSheathing: 10445,
-    gSheathing: 825,
+  /* ================================
+     STEEL
+  ================================= */
 
-    // ----------------------------------------------------------
-    // FASTENER PROPERTIES
-    // ----------------------------------------------------------
+  fySteel: 230,
+  fuSteel: 344,
 
-    dC: 4.064,
-    sC: 152,
-    nC: 50,
-  });
+  // 2.03 × 10^5
+  eSteel: 203000,
 
-  // Handle shear wall parameter changes
-  const handleParameterChange = (field, value) => {
-    setParameters((prev) => ({
-      ...prev,
-      [field]: value,
+  tF: 1.12,
+
+  poissonRatio: 0.02,
+
+
+  /* ================================
+     SHEATHING SIDE 1
+  ================================= */
+
+  sheathingConfiguration: "single",
+
+  sheathingMaterial: "FCB",
+
+  tS: 12.5,
+
+  fuSheathing: 4.5,
+
+  sheathingPoissonRatio: 0.02,
+
+  // 1.0445 × 10^4
+  eSheathing: 10445,
+
+  // 8.25 × 10^2
+  gSheathing: 825,
+
+
+  /* ================================
+     SHEATHING SIDE 2
+  ================================= */
+
+  sheathingMaterial2: "FCB",
+
+  tS2: 12.5,
+
+  fuSheathing2: 4.5,
+
+  sheathingPoissonRatio2: 0.02,
+
+  eSheathing2: 10445,
+
+  gSheathing2: 825,
+
+
+  /* ================================
+     SCREWS
+  ================================= */
+
+  screwMode: "manual",
+
+  screwType: "No. 8",
+
+  dC: 4.064,
+
+  nC: 50,
+
+  specimenType: "control",
+
+  perimeterSpacing: 152,
+
+  fieldSpacing: 305,
+
+  horizontalSpacing: 305,
+
+
+  /* ================================
+     TEMPORARY SCREW RESISTANCES
+  ================================= */
+
+  vrSScrew: 3256,
+
+  vrPScrew: 1255,
+
+
+  /* ================================
+     FRAME
+  ================================= */
+
+  // 1.816 × 10^5
+  endStudMomentOfInertia: 181600,
+
+  // 5.124 × 10^4
+  intermediateStudMomentOfInertia: 51240,
+
+  numberOfIntermediateStuds: 1,
+
+  nominalCompressionStrength: 50000,
+});
+
+  const [result, setResult] =
+    useState(null);
+
+  const [isCalculating, setIsCalculating] =
+    useState(false);
+
+  const handleParameterChange = (
+    key,
+    value
+  ) => {
+    setParameters((previous) => ({
+      ...previous,
+      [key]: value,
     }));
   };
 
+  const handleCalculate = () => {
+    setIsCalculating(true);
 
-  // ============================================================
-  // APP UI
-  // ============================================================
+    try {
+      // ==========================================
+      // 1. CALCULATE SCREW LAYOUT
+      // ==========================================
+
+      const screwLayoutResult =
+        calculateScrewLayout({
+          mode:
+            parameters.screwMode,
+
+          panelHeight:
+            parameters.panelHeight,
+
+          panelLength:
+            parameters.panelLength,
+
+          totalScrews:
+            parameters.nC,
+
+          specimenType:
+            parameters.specimenType,
+
+          perimeterSpacing:
+            parameters.perimeterSpacing,
+
+          fieldSpacing:
+            parameters.fieldSpacing,
+
+          horizontalSpacing:
+            parameters.horizontalSpacing,
+        });
+
+      if (!screwLayoutResult.success) {
+        setResult(
+          screwLayoutResult
+        );
+
+        return;
+      }
+
+      // ==========================================
+      // 2. CONNECTION INPUTS
+      // ==========================================
+
+      const connection = {
+        tS:
+          parameters.tS,
+
+        dC:
+          parameters.dC,
+
+        fuSheathing:
+          parameters.fuSheathing,
+
+        tF:
+          parameters.tF,
+
+        fuSteel:
+          parameters.fuSteel,
+
+        vrSScrew:
+          parameters.vrSScrew,
+
+        vrPScrew:
+          parameters.vrPScrew,
+      };
+
+      // ==========================================
+      // 3. SHEATHING INPUTS
+      // ==========================================
+
+      const sheathing = {
+        thickness:
+          parameters.tS,
+
+        youngsModulus:
+          parameters.eSheathing,
+
+        shearModulus:
+          parameters.gSheathing,
+
+        screwSpacing:
+          parameters.perimeterSpacing,
+      };
+
+      // ==========================================
+      // 4. FRAME INPUTS
+      // ==========================================
+
+      const frame = {
+        youngsModulus:
+          parameters.eSteel,
+
+        endStudMomentOfInertia:
+          parameters.endStudMomentOfInertia,
+
+        intermediateStudMomentOfInertia:
+          parameters.intermediateStudMomentOfInertia,
+
+        numberOfIntermediateStuds:
+          parameters.numberOfIntermediateStuds,
+
+        nominalCompressionStrength:
+          parameters.nominalCompressionStrength,
+      };
+
+      // ==========================================
+      // 5. MAIN CALCULATION
+      // ==========================================
+
+      const calculation =
+        calculateLateralStrength({
+          panelHeight:
+            parameters.panelHeight,
+
+          panelLength:
+            parameters.panelLength,
+
+          connection,
+
+          screwLayout:
+            screwLayoutResult,
+
+          sheathing,
+
+          frame,
+        });
+
+      setResult(
+        calculation
+      );
+    } catch (error) {
+      console.error(error);
+
+      setResult({
+        success: false,
+        error:
+          error.message ||
+          "An unexpected calculation error occurred.",
+      });
+    } finally {
+      setIsCalculating(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-gray-900">
 
-      {/* ====================================================== */}
-      {/* HEADER                                                 */}
-      {/* ====================================================== */}
+      {/* HEADER */}
+      <header className="border-b border-gray-200 bg-white">
+        <div className="mx-auto max-w-7xl px-6 py-6">
 
-      <header className="border-b border-gray-300 bg-white">
-
-        <div className="mx-auto max-w-7xl px-8 py-5">
-
-          <h1 className="text-2xl font-semibold text-blue-800">
+          <h1 className="text-2xl font-bold tracking-tight text-blue-700">
             CFS Shear Wall Calculator
           </h1>
 
-          <p className="mt-1 text-sm text-gray-600">
-            Cold-Formed Steel Section & Lateral Strength Analysis
+          <p className="mt-1 text-sm text-gray-500">
+            Lateral strength analysis of cold-formed steel shear wall panels
           </p>
 
         </div>
-
       </header>
 
+      {/* MAIN */}
+      <main className="mx-auto max-w-7xl px-6 py-8">
 
-      {/* ====================================================== */}
-      {/* MAIN CONTENT                                           */}
-      {/* ====================================================== */}
+        {/* INPUT SECTION */}
+        <section className="rounded-lg border border-gray-200 bg-white shadow-sm">
 
-      <main className="mx-auto max-w-7xl px-8 py-8">
+          <div className="border-b border-gray-200 px-6 py-5">
 
+            <h2 className="text-lg font-semibold text-gray-900">
+              Shear Wall Parameters
+            </h2>
 
-        {/* ==================================================== */}
-        {/* SECTION DEFINITION                                   */}
-        {/* ==================================================== */}
+            <p className="mt-1 text-sm text-gray-500">
+              Enter the panel, material, sheathing, screw and frame parameters.
+            </p>
 
-        <div className="mb-6">
+          </div>
 
-          <h2 className="text-xl font-semibold text-gray-800">
-            Section Definition
-          </h2>
+          <div className="p-6">
 
-          <p className="mt-1 text-sm text-gray-500">
-            Enter the geometric properties of the cold-formed steel
-            section.
-          </p>
+            <ShearWallParameters
+              parameters={parameters}
+              onChange={
+                handleParameterChange
+              }
+            />
 
-        </div>
+            {/* CALCULATE BUTTON */}
 
+            <div className="mt-8 border-t border-gray-200 pt-6">
 
-        {/* ==================================================== */}
-        {/* SECTION INPUT + DRAWING                              */}
-        {/* ==================================================== */}
+              <button
+                type="button"
+                onClick={
+                  handleCalculate
+                }
+                disabled={
+                  isCalculating
+                }
+                className="rounded-md bg-blue-700 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isCalculating
+                  ? "Calculating..."
+                  : "Calculate"}
+              </button>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            </div>
 
-          {/* LEFT - INPUTS */}
+          </div>
+        </section>
 
-          <SectionInput
-            section={section}
-            onChange={handleSectionChange}
+        {/* RESULTS */}
+        <section className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+
+          <Results
+            result={result}
           />
 
-
-          {/* RIGHT - DRAWING */}
-
-          <SectionDrawing
-            section={section}
-          />
-
-        </div>
-
-
-        {/* ==================================================== */}
-        {/* SECTION PROPERTIES                                   */}
-        {/* ==================================================== */}
-
-        <SectionProperties
-          section={section}
-        />
-
-
-        {/* ==================================================== */}
-        {/* SHEAR WALL PARAMETERS                                */}
-        {/* ==================================================== */}
-
-        <ShearWallParameters
-          parameters={parameters}
-          onChange={handleParameterChange}
-        />
-
-        <Results />
-
+        </section>
 
       </main>
-
     </div>
   );
 }
