@@ -1,55 +1,33 @@
-import { calculateConnectionStrength } from "./connectionStrength";
-import { calculateCu } from "./cuStrength";
-import { calculateSheathingStrength } from "./sheathingStrength";
-import { calculateSheathingStiffness } from "./sheathingStiffness";
+import { calculateConnectionStrength } from "./connectionStrength.js";
+import { calculateCu } from "./cuStrength.js";
+import { calculateSheathingStrength } from "./sheathingStrength.js";
+import { calculateSheathingStiffness } from "./sheathingStiffness.js";
 import {
   calculateFrameStiffness,
   calculateFrameFailure,
-} from "./frameStrength";
+} from "./frameStrength.js";
 
 export function calculateLateralStrength(inputs) {
   const {
     panelHeight,
     panelLength,
-
     connection,
-
     screwLayout,
-
     sheathing,
-
     frame,
+    section = null,
   } = inputs;
 
-  // =================================================
-  // 1. SCREW LAYOUT
-  // =================================================
+  const screwLocations = screwLayout.screwLocations || [];
+  const totalScrews = Number(screwLayout.totalScrews);
 
-  const screwLocations =
-  screwLayout.screwLocations || [];
-
-const totalScrews =
-  Number(screwLayout.totalScrews);
-
-  // =================================================
-  // 2. CONNECTION STRENGTH
-  // =================================================
-
-  const connectionResult =
-    calculateConnectionStrength(
-      connection
-    );
+  const connectionResult = calculateConnectionStrength(connection);
 
   if (!connectionResult.success) {
     return connectionResult;
   }
 
-  // =================================================
-  // 3. Cu
-  // =================================================
-
-  const cuResult =
-  calculateCu({
+  const cuResult = calculateCu({
     panelHeight,
     panelLength,
     screwLocations,
@@ -60,166 +38,88 @@ const totalScrews =
     return cuResult;
   }
 
-  // =================================================
-  // 4. SHEATHING
-  // =================================================
-
-  const sheathingResult =
-    calculateSheathingStrength({
-      panelHeight,
-      panelLength,
-      Cu: cuResult.Cu,
-      Vr: connectionResult.vr,
-    });
+  const sheathingResult = calculateSheathingStrength({
+    panelHeight,
+    panelLength,
+    Cu: cuResult.Cu,
+    Vr: connectionResult.vr,
+  });
 
   if (!sheathingResult.success) {
     return sheathingResult;
   }
 
-  // =================================================
-  // 5. SHEATHING STIFFNESS
-  // =================================================
-
-  const stiffnessResult =
-    calculateSheathingStiffness({
-      panelHeight,
-      panelLength,
-      thickness: sheathing.thickness,
-      youngsModulus:
-        sheathing.youngsModulus,
-      shearModulus:
-        sheathing.shearModulus,
-      screwSpacing:
-        sheathing.screwSpacing,
-      totalScrews,
-      Cu: cuResult.Cu,
-    });
+  const stiffnessResult = calculateSheathingStiffness({
+    panelHeight,
+    panelLength,
+    thickness: sheathing.thickness,
+    youngsModulus: sheathing.youngsModulus,
+    shearModulus: sheathing.shearModulus,
+    screwSpacing: sheathing.screwSpacing,
+    totalScrews: cuResult.nC,
+    Cu: cuResult.Cu,
+  });
 
   if (!stiffnessResult.success) {
     return stiffnessResult;
   }
 
-  // =================================================
-  // 6. FRAME STIFFNESS
-  // =================================================
-
-  const frameStiffnessResult =
-    calculateFrameStiffness({
-      panelHeight,
-      youngsModulus:
-        frame.youngsModulus,
-      endStudMomentOfInertia:
-        frame.endStudMomentOfInertia,
-      intermediateStudMomentOfInertia:
-        frame.intermediateStudMomentOfInertia,
-      numberOfIntermediateStuds:
-        frame.numberOfIntermediateStuds,
-    });
+  const frameStiffnessResult = calculateFrameStiffness({
+    panelHeight,
+    youngsModulus: frame.youngsModulus,
+    endStudMomentOfInertia: frame.endStudMomentOfInertia,
+    intermediateStudMomentOfInertia: frame.intermediateStudMomentOfInertia,
+    numberOfIntermediateStuds: frame.numberOfIntermediateStuds,
+  });
 
   if (!frameStiffnessResult.success) {
     return frameStiffnessResult;
   }
 
-  // =================================================
-  // 7. SHEATHING + FRAME
-  //
-  // PR = Ps (1 + Kf / Ks)
-  // =================================================
+  const Ps = sheathingResult.Ps;
+  const Ks = stiffnessResult.Ks;
+  const Kf = frameStiffnessResult.Kf;
+  const PRSheathing = Ps * (1 + Kf / Ks);
 
-  const Ps =
-    sheathingResult.Ps;
-
-  const Ks =
-    stiffnessResult.Ks;
-
-  const Kf =
-    frameStiffnessResult.Kf;
-
-  const PRSheathing =
-    Ps *
-    (1 + Kf / Ks);
-
-  // =================================================
-  // 8. FRAME FAILURE
-  // =================================================
-
-  const frameFailureResult =
-    calculateFrameFailure({
-      panelHeight,
-      panelLength,
-      nominalCompressionStrength:
-        frame.nominalCompressionStrength,
-    });
+  const frameFailureResult = calculateFrameFailure({
+    panelHeight,
+    panelLength,
+    nominalCompressionStrength: frame.nominalCompressionStrength,
+  });
 
   if (!frameFailureResult.success) {
     return frameFailureResult;
   }
 
-  const Pfc =
-    frameFailureResult.Pfc;
-
-  // =================================================
-  // 9. GOVERNING FAILURE
-  // =================================================
-
-  const ultimateStrength =
-    Math.min(
-      PRSheathing,
-      Pfc
-    );
-
+  const Pfc = frameFailureResult.Pfc;
+  const ultimateStrength = Math.min(PRSheathing, Pfc);
   const governingFailureMode =
-    PRSheathing <= Pfc
-      ? "Sheathing Failure"
-      : "Frame Failure";
-
-  // =================================================
-  // 10. ULTIMATE DISPLACEMENT
-  //
-  // Δ = P / (Kf + Ks)
-  // =================================================
-
-  const ultimateDisplacement =
-    ultimateStrength /
-    (Kf + Ks);
-
-  // =================================================
-  // FINAL RESULT
-  // =================================================
+    PRSheathing <= Pfc ? "Sheathing failure" : "Frame failure";
+  const ultimateDisplacement = ultimateStrength / (Kf + Ks);
 
   return {
     success: true,
-
+    panelHeight: Number(panelHeight),
+    panelLength: Number(panelLength),
+    section,
     connection: connectionResult,
-
+    screwLayout,
     screwGroup: cuResult,
-
-    sheathingStrength:
-      sheathingResult,
-
-    sheathingStiffness:
-      stiffnessResult,
-
-    frameStiffness:
-      frameStiffnessResult,
-
-    frameFailure:
-      frameFailureResult,
-
+    screwDetails: cuResult.screwDetails,
+    sheathingStrength: sheathingResult,
+    sheathingStiffness: stiffnessResult,
+    frameStiffness: frameStiffnessResult,
+    frameFailure: frameFailureResult,
     PRSheathing,
-
     Pfc,
-
-    ultimateLateralStrength:
-      ultimateStrength,
-
+    Pn: frameFailureResult.Pn,
+    ultimateLateralStrength: ultimateStrength,
     governingFailureMode,
-
     ultimateDisplacement,
-
-    totalScrews,
-
+    totalScrews: cuResult.nC,
     Ks,
     Kf,
+    KEndEach: frameStiffnessResult.KEndEach,
+    KIntermediate: frameStiffnessResult.KIntermediate,
   };
 }

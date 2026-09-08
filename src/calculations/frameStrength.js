@@ -1,13 +1,15 @@
 /**
  * frameStrength.js
  *
- * Frame stiffness:
+ * Frame stiffness (two double end studs + intermediate studs):
  *
- * Kf = Σ(3 E I / h³)
+ *   K_end_each     = 3 E IF_end / H³
+ *   K_intermediate = 3 E IF_intermediate / H³
+ *   Kf = 2 * K_end_each + n_intermediate * K_intermediate
  *
  * Frame failure:
  *
- * Pfc = Pn (l / h)
+ *   Pfc = Pn (L / H)
  */
 
 export function calculateFrameStiffness({
@@ -20,25 +22,13 @@ export function calculateFrameStiffness({
   const h = Number(panelHeight);
   const E = Number(youngsModulus);
   const IEnd = Number(endStudMomentOfInertia);
-  const IIntermediate =
-    Number(intermediateStudMomentOfInertia);
-  const nIntermediate =
-    Number(numberOfIntermediateStuds);
+  const IIntermediate = Number(intermediateStudMomentOfInertia);
+  const nIntermediate = Number(numberOfIntermediateStuds);
 
-  const values = [
-    h,
-    E,
-    IEnd,
-    IIntermediate,
-    nIntermediate,
-  ];
+  const values = [h, E, IEnd, IIntermediate, nIntermediate];
 
   if (
-    values.some(
-      (value) =>
-        !Number.isFinite(value) ||
-        value < 0
-    ) ||
+    values.some((value) => !Number.isFinite(value) || value < 0) ||
     h <= 0 ||
     E <= 0 ||
     IEnd <= 0
@@ -49,24 +39,20 @@ export function calculateFrameStiffness({
     };
   }
 
-  // Two end studs + intermediate studs
-  const totalEI =
-    2 * IEnd +
-    nIntermediate * IIntermediate;
-
-  const Kf =
-    (3 * E * totalEI) /
-    Math.pow(h, 3);
+  const KEndEach = (3.0 * E * IEnd) / Math.pow(h, 3);
+  const KIntermediate =
+    (3.0 * E * IIntermediate) / Math.pow(h, 3);
+  const Kf = 2.0 * KEndEach + nIntermediate * KIntermediate;
 
   return {
     success: true,
-
-    totalEI,
+    KEndEach,
+    KIntermediate,
     Kf,
-
     numberOfEndStuds: 2,
-    numberOfIntermediateStuds:
-      nIntermediate,
+    numberOfIntermediateStuds: nIntermediate,
+    IF_end: IEnd,
+    IF_intermediate: IIntermediate,
   };
 }
 
@@ -77,8 +63,7 @@ export function calculateFrameFailure({
 }) {
   const h = Number(panelHeight);
   const l = Number(panelLength);
-  const Pn =
-    Number(nominalCompressionStrength);
+  const Pn = Number(nominalCompressionStrength);
 
   if (!Number.isFinite(h) || h <= 0) {
     return {
@@ -97,13 +82,11 @@ export function calculateFrameFailure({
   if (!Number.isFinite(Pn) || Pn <= 0) {
     return {
       success: false,
-      error:
-        "Nominal compression strength Pn must be greater than zero.",
+      error: "Nominal compression strength Pn must be greater than zero.",
     };
   }
 
-  const Pfc =
-    Pn * (l / h);
+  const Pfc = Pn * (l / h);
 
   return {
     success: true,

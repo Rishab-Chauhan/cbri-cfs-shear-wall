@@ -2,10 +2,11 @@
  * sheathingStrength.js
  *
  * Calculates:
- *   η
- *   Ps
+ *   η  (PDF Eq. 3.13)
+ *   Ps (PDF Eq. 3.12)
  *
- * For one sheathing side.
+ * η = sqrt(8 - H/L) - 1.45   when 8 - H/L ≥ 0
+ * η = 0                       otherwise
  */
 
 export function calculateSheathingStrength({
@@ -35,23 +36,23 @@ export function calculateSheathingStrength({
     };
   }
 
-  // η = sqrt(8 - h/l - 1.45)
-  const etaArgument =
-    8.0 - h / l - 1.45;
+  const ratio = h / l;
+  const etaArgument = 8.0 - ratio;
 
-  const eta =
-    Math.sqrt(
-      Math.max(etaArgument, 0)
-    );
+  let eta = 0;
 
-  // Ps = Cu * Vr * η
-  const Ps =
-    cu * vr * eta;
+  if (etaArgument >= 0) {
+    eta = Math.max(0, Math.sqrt(etaArgument) - 1.45);
+  }
+
+  const Ps = cu * vr * eta;
 
   return {
     success: true,
+    ratio,
     etaArgument,
     eta,
     Ps,
+    aspectRatioWarning: ratio > 8.0,
   };
 }

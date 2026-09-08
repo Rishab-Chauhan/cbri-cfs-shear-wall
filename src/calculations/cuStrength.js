@@ -1,3 +1,21 @@
+/**
+ * Cu (screw-group strength reduction factor)
+ *
+ * Matches the Martinez thesis simplified procedure / test03.py:
+ *
+ *   J  = Σ(x² + y²)
+ *   ey0 = H / 2
+ *   M0 = Px * ey0
+ *   δy = (Px / nC) * (J / M0)
+ *   ey = ey0 + δy
+ *   Mp = Px * ey
+ *   di = sqrt(x² + (y + δy)²)
+ *   M  = 0.93 * Σ di
+ *   Cu = |M / Mp|
+ *
+ * Coordinates are already in the wall-centre system.
+ */
+
 export function calculateCu({
   panelHeight,
   panelLength,
@@ -6,7 +24,7 @@ export function calculateCu({
 }) {
   const h = Number(panelHeight);
   const l = Number(panelLength);
-  const nC = Number(totalScrews);
+  const nCInput = Number(totalScrews);
 
   if (!Number.isFinite(h) || h <= 0) {
     return {
@@ -22,348 +40,160 @@ export function calculateCu({
     };
   }
 
-  if (!Number.isFinite(nC) || nC <= 0) {
+  if (!Number.isFinite(nCInput) || nCInput <= 0) {
     return {
       success: false,
-      error:
-        "Total number of screws must be greater than zero.",
+      error: "Total number of screws must be greater than zero.",
     };
   }
 
   let locations = screwLocations;
 
-  /*
-   * MANUAL SCREW MODE
-   *
-   * If the user supplied only nC,
-   * generate a default control-specimen
-   * distribution for the Cu calculation.
-   */
-  if (
-    !Array.isArray(locations) ||
-    locations.length === 0
-  ) {
-    locations =
-      generateManualControlLayout(
-        h,
-        l,
-        nC
-      );
+  if (!Array.isArray(locations) || locations.length === 0) {
+    locations = generateManualControlLayout(h, l, nCInput);
   }
 
-  /*
-   * Make sure the number used in the
-   * Cu calculation agrees with the
-   * actual coordinate set.
-   */
-  const actualNC =
-    locations.length;
+  const actualNC = locations.length;
 
   if (actualNC === 0) {
     return {
       success: false,
-      error:
-        "Unable to generate screw-group coordinates.",
+      error: "Unable to generate screw-group coordinates.",
     };
   }
 
-  const xCenter = l / 2;
-  const yCenter = h / 2;
-
-  const coordinates =
-    locations.map((screw) => ({
-      xCi:
-        Number(screw.x) -
-        xCenter,
-
-      yCi:
-        Number(screw.y) -
-        yCenter,
-    }));
-
-  // J = Σ(xCi² + yCi²)
-
-  const J =
-    coordinates.reduce(
-      (sum, point) =>
-        sum +
-        Math.pow(point.xCi, 2) +
-        Math.pow(point.yCi, 2),
-      0
-    );
-
-  // Source procedure:
-  // M0 = Px * ey(0)
-  //
-  // For the current panel:
-  // ey(0) = panel length
-
   const Px = 1;
+  const ey0 = h / 2;
+  const M0 = Px * ey0;
 
-  const ey0 = l;
+  const J = locations.reduce(
+    (sum, screw) =>
+      sum + Math.pow(Number(screw.x), 2) + Math.pow(Number(screw.y), 2),
+    0
+  );
 
-  const M0 =
-    Px * ey0;
-
-  // δy = Px J / (nC M0)
-
-  const deltaY =
-    (Px * J) /
-    (actualNC * M0);
-
-  // ey = ey(0) + δy
-
-  const ey =
-    ey0 + deltaY;
-
-  // Mp = Px ey
-
-  const Mp =
-    Px * ey;
-
-  // Calculate di for every screw
-
-  const screwDistances =
-    coordinates.map((point) => {
-      const dyi =
-        point.yCi + deltaY;
-
-      const di =
-        Math.sqrt(
-          Math.pow(point.xCi, 2) +
-          Math.pow(dyi, 2)
-        );
-
-      return {
-        xCi: point.xCi,
-        yCi: point.yCi,
-        dyi,
-        di,
-      };
-    });
-
-  // Mu = 0.93 Σdi
-
+  const deltaY = (Px / actualNC) * (J / M0);
+  const ey = ey0 + deltaY;
+  const Mp = Px * ey;
   const normalizedForce = 0.93;
 
-  const Mu =
-    normalizedForce *
-    screwDistances.reduce(
-      (sum, point) =>
-        sum + point.di,
-      0
-    );
+  const screwDetails = locations.map((screw, index) => {
+    const x = Number(screw.x);
+    const y = Number(screw.y);
+    const dy = y + deltaY;
+    const xSquared = x * x;
+    const ySquared = y * y;
+    const x2PlusY2 = xSquared + ySquared;
+    const dySquared = dy * dy;
+    const distance = Math.sqrt(xSquared + dySquared);
+    const mContribution = normalizedForce * distance;
 
-  // Cu = Mu / Mp
+    return {
+      number: index + 1,
+      x,
+      y,
+      location: screw.location || screw.type || "",
+      type: screw.type || "",
+      xSquared,
+      ySquared,
+      x2PlusY2,
+      dy,
+      dySquared,
+      distance,
+      mContribution,
+    };
+  });
 
-  const Cu =
-    Mp !== 0
-      ? Mu / Mp
-      : 0;
+  const M = screwDetails.reduce(
+    (sum, screw) => sum + screw.mContribution,
+    0
+  );
+
+  const Cu = Mp !== 0 ? Math.abs(M / Mp) : 0;
 
   return {
     success: true,
-
     nC: actualNC,
-
-    xCenter,
-    yCenter,
-
+    xCenter: 0,
+    yCenter: 0,
     J,
     M0,
-
     ey0,
     deltaY,
     ey,
-
     Mp,
-    Mu,
-
+    Mu: M,
+    M,
     Cu,
-
     normalizedForce,
-
-    screwDistances,
-
-    generatedForCu:
-      screwLocations.length === 0,
+    screwDistances: screwDetails,
+    screwDetails,
+    generatedForCu: !screwLocations || screwLocations.length === 0,
   };
 }
 
-function generateManualControlLayout(
-  panelHeight,
-  panelLength,
-  nC
-) {
+function generateManualControlLayout(panelHeight, panelLength, nC) {
   const locations = [];
 
-  /*
-   * Default control-specimen layout.
-   *
-   * The layout is generated around the
-   * panel perimeter plus an internal
-   * vertical screw line.
-   *
-   * This is only used when the user
-   * provides nC without coordinates.
-   */
-
-  const addScrew = (x, y) => {
-    const exists =
-      locations.some(
-        (point) =>
-          Math.abs(point.x - x) < 1e-9 &&
-          Math.abs(point.y - y) < 1e-9
-      );
+  const addScrew = (x, y, location) => {
+    const exists = locations.some(
+      (point) =>
+        Math.abs(point.x - x) < 1e-9 && Math.abs(point.y - y) < 1e-9
+    );
 
     if (!exists) {
-      locations.push({ x, y });
+      locations.push({ x, y, location, type: "generated" });
     }
   };
 
-  /*
-   * First generate a regular distribution
-   * of exactly nC points around the
-   * control-specimen perimeter/internal line.
-   *
-   * For now we use normalized positions.
-   */
+  const perimeterCount = Math.max(4, Math.floor(nC * 0.75));
+  const internalCount = Math.max(1, nC - perimeterCount);
 
-  const perimeterCount =
-    Math.max(
-      4,
-      Math.floor(nC * 0.75)
-    );
-
-  const internalCount =
-    Math.max(
-      1,
-      nC - perimeterCount
-    );
-
-  // -------------------------------
-  // Perimeter
-  // -------------------------------
-
-  for (
-    let i = 0;
-    i < perimeterCount;
-    i++
-  ) {
-    const position =
-      i / perimeterCount;
-
-    const perimeter =
-      2 *
-      (panelLength + panelHeight);
-
-    const distance =
-      position * perimeter;
+  for (let i = 0; i < perimeterCount; i += 1) {
+    const position = i / perimeterCount;
+    const perimeter = 2 * (panelLength + panelHeight);
+    const distance = position * perimeter;
 
     let x;
     let y;
+    let location;
 
-    if (
-      distance <= panelLength
-    ) {
+    if (distance <= panelLength) {
       x = distance;
       y = 0;
-    } else if (
-      distance <=
-      panelLength + panelHeight
-    ) {
+      location = "Bottom edge";
+    } else if (distance <= panelLength + panelHeight) {
       x = panelLength;
-      y =
-        distance -
-        panelLength;
-    } else if (
-      distance <=
-      2 * panelLength +
-        panelHeight
-    ) {
-      x =
-        panelLength -
-        (
-          distance -
-          panelLength -
-          panelHeight
-        );
-
+      y = distance - panelLength;
+      location = "Right edge";
+    } else if (distance <= 2 * panelLength + panelHeight) {
+      x = panelLength - (distance - panelLength - panelHeight);
       y = panelHeight;
+      location = "Top edge";
     } else {
       x = 0;
-
-      y =
-        panelHeight -
-        (
-          distance -
-          2 * panelLength -
-          panelHeight
-        );
+      y = panelHeight - (distance - 2 * panelLength - panelHeight);
+      location = "Left edge";
     }
 
-    addScrew(x, y);
+    addScrew(x - panelLength / 2, y - panelHeight / 2, location);
   }
 
-  // -------------------------------
-  // Internal vertical line
-  // -------------------------------
+  const xMiddle = 0;
 
-  const xMiddle =
-    panelLength / 2;
-
-  for (
-    let i = 0;
-    i < internalCount;
-    i++
-  ) {
+  for (let i = 0; i < internalCount; i += 1) {
     const y =
-      (i /
-        Math.max(
-          internalCount - 1,
-          1
-        )) *
-      panelHeight;
-
-    addScrew(
-      xMiddle,
-      y
-    );
+      (i / Math.max(internalCount - 1, 1)) * panelHeight - panelHeight / 2;
+    addScrew(xMiddle, y, "Intermediate stud");
   }
-
-  /*
-   * If duplicate removal changed the
-   * count, add points along the
-   * centre line until nC is reached.
-   */
 
   let extraIndex = 1;
 
-  while (
-    locations.length < nC
-  ) {
-    const y =
-      (
-        extraIndex /
-        (nC + 1)
-      ) *
-      panelHeight;
-
-    addScrew(
-      xMiddle,
-      y
-    );
-
-    extraIndex++;
+  while (locations.length < nC) {
+    const y = (extraIndex / (nC + 1)) * panelHeight - panelHeight / 2;
+    addScrew(xMiddle, y, "Intermediate stud");
+    extraIndex += 1;
   }
 
-  /*
-   * If the generated layout somehow
-   * exceeds nC, trim it.
-   */
-
-  return locations.slice(
-    0,
-    nC
-  );
+  return locations.slice(0, nC);
 }

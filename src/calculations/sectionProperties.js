@@ -10,14 +10,8 @@
  *      │              │
  *      └──────────────┘  ← Bottom flange + lip
  *
- * The section is treated as a sharp-cornered section
- * when radius = 0.
- *
- * Dimensions:
- *   h = web length
- *   b = flange width
- *   c = lip length
- *   t = thickness
+ * Intermediate-stud IF  = MATLAB Iy of one C-section
+ * Double end-stud IF    = 2 × MATLAB double-C expression
  *
  * Units:
  *   Length  = mm
@@ -31,10 +25,6 @@ export function calculateSectionProperties(section) {
   const c = Number(section.lipLength);
   const t = Number(section.thickness);
   const radius = Number(section.radius) || 0;
-
-  // ------------------------------------------------------------
-  // INPUT VALIDATION
-  // ------------------------------------------------------------
 
   if (
     !Number.isFinite(h) ||
@@ -53,89 +43,117 @@ export function calculateSectionProperties(section) {
     return null;
   }
 
-  /*
-   * Current calculation assumes sharp corners.
-   *
-   * Radius will be incorporated separately when we implement
-   * rounded-corner geometry.
-   */
   if (radius !== 0) {
     console.warn(
       "Corner radius is currently not included in the section property calculation."
     );
   }
 
-  // ------------------------------------------------------------
-  // RECTANGULAR COMPONENTS
-  // ------------------------------------------------------------
-  //
-  // We divide the C-section into 5 non-overlapping rectangles:
-  //
-  // 1. Web
-  // 2. Top flange
-  // 3. Bottom flange
-  // 4. Top lip
-  // 5. Bottom lip
-  //
-  // This avoids double-counting material at the intersections.
-  // ------------------------------------------------------------
+  const w = h;
+  const f = b;
+  const l = c;
+  const TST = t;
+
+  // --------------------------------------------------------
+  // STUD CALCULATIONS -- same as MATLAB / test03.py
+  // --------------------------------------------------------
+
+  const ta =
+    (2 * (l - TST * 0.5 + f - TST) + w - TST) * TST;
+  const aw = (w - 2 * TST) * TST;
+  const af = f * TST;
+  const al = (l - TST) * TST;
+
+  // Centre of mass -- origin at left bottom corner
+  const xcm =
+    (2 * al * TST * 0.5 + 2 * af * f * 0.5 + aw * (f - TST * 0.5)) /
+    ta;
+
+  const ycm =
+    (
+      af * 0.5 * TST +
+      al * (TST * 3 - l) * 0.5 +
+      aw * w * 0.5 +
+      af * (w - TST * 0.5) +
+      al * (w + 0.5 * TST - l * 1.5)
+    ) / ta;
+
+  // --------------------------------------------------------
+  // MOMENT OF INERTIA OF ONE C-SECTION -- MATLAB Iy
+  // --------------------------------------------------------
+
+  const Iy =
+    (w * f ** 3 / 12.0 + w * f * (f * 0.5 - xcm) ** 2) -
+    (
+      ((f - TST * 2) ** 3 * (w - TST * 2)) / 12.0 +
+      (f - TST * 2) *
+        (w - TST * 2) *
+        ((f - TST * 2) * 0.5 + TST - xcm) ** 2 +
+      ((w - 2 * l) * TST ** 3) / 12.0 +
+      (w - 2 * l) * TST * (TST * 0.5 - xcm) ** 2
+    );
+
+  // --------------------------------------------------------
+  // DOUBLE END-STUD -- exact MATLAB expression
+  // --------------------------------------------------------
+
+  const IF_intermediate = Iy;
+
+  const IF_end =
+    2.0 *
+    (
+      (w * f ** 3 / 12.0 + w * f * (f * 0.5) ** 2) -
+      (
+        ((f - TST * 2) ** 3 * (w - TST * 2)) / 12.0 +
+        (f - TST * 2) *
+          (w - TST * 2) *
+          ((f - TST * 2) * 0.5 + TST) ** 2 +
+        ((w - 2 * l) * TST ** 3) / 12.0 +
+        (w - 2 * l) * TST * (TST * 0.5 - f) ** 2
+      )
+    );
+
+  // --------------------------------------------------------
+  // RECTANGULAR COMPONENTS -- Ix via parallel-axis theorem
+  // --------------------------------------------------------
 
   const rectangles = [
     {
       name: "Web",
-
       width: t,
       height: h,
-
-      // centroid coordinates
       x: t / 2,
       y: h / 2,
     },
-
     {
       name: "Top Flange",
-
       width: b - t,
       height: t,
-
       x: t + (b - t) / 2,
       y: h - t / 2,
     },
-
     {
       name: "Bottom Flange",
-
       width: b - t,
       height: t,
-
       x: t + (b - t) / 2,
       y: t / 2,
     },
-
     {
       name: "Top Lip",
-
       width: t,
       height: c,
-
       x: b - t / 2,
       y: h - t - c / 2,
     },
-
     {
       name: "Bottom Lip",
-
       width: t,
       height: c,
-
       x: b - t / 2,
       y: t + c / 2,
     },
   ];
-
-  // ------------------------------------------------------------
-  // AREA
-  // ------------------------------------------------------------
 
   rectangles.forEach((rect) => {
     rect.area = rect.width * rect.height;
@@ -146,75 +164,42 @@ export function calculateSectionProperties(section) {
     0
   );
 
-  // ------------------------------------------------------------
-  // CENTROID
-  // ------------------------------------------------------------
-
-  const centroidX =
+  const centroidXRect =
     rectangles.reduce(
       (sum, rect) => sum + rect.area * rect.x,
       0
     ) / area;
 
-  const centroidY =
+  const centroidYRect =
     rectangles.reduce(
       (sum, rect) => sum + rect.area * rect.y,
       0
     ) / area;
 
-  // ------------------------------------------------------------
-  // MOMENT OF INERTIA
-  // ------------------------------------------------------------
-  //
-  // Rectangle centroidal inertias:
-  //
-  // Ix = b h³ / 12
-  // Iy = h b³ / 12
-  //
-  // Parallel axis theorem:
-  //
-  // Ix = Ix_local + A(dy)²
-  // Iy = Iy_local + A(dx)²
-  // ------------------------------------------------------------
-
   let Ix = 0;
-  let Iy = 0;
 
   rectangles.forEach((rect) => {
     const IxLocal =
       (rect.width * Math.pow(rect.height, 3)) / 12;
-
-    const IyLocal =
-      (rect.height * Math.pow(rect.width, 3)) / 12;
-
-    const dx = rect.x - centroidX;
-    const dy = rect.y - centroidY;
-
+    const dy = rect.y - centroidYRect;
     Ix += IxLocal + rect.area * Math.pow(dy, 2);
-    Iy += IyLocal + rect.area * Math.pow(dx, 2);
   });
-
-  // ------------------------------------------------------------
-  // RADIUS
-  // ------------------------------------------------------------
-
-  /*
-   * For now radius = 0 is the intended calculation.
-   *
-   * We return it so the rest of the application knows which
-   * geometry was used.
-   */
 
   return {
     area,
-    centroidX,
-    centroidY,
+    centroidX: xcm,
+    centroidY: ycm,
+    centroidXRect,
+    centroidYRect,
     Ix,
     Iy,
-
+    IF_intermediate,
+    IF_end,
     radius,
-
-    // Useful for debugging / future calculations
     rectangles,
+    webLength: w,
+    flangeWidth: f,
+    lipLength: l,
+    thickness: TST,
   };
 }

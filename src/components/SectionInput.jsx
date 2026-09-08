@@ -112,15 +112,10 @@ function SectionInput({ section, onChange }) {
           </div>
         </div>
 
-        {/* BUTTON */}
-        <div className="pt-2">
-          <button
-            type="button"
-            className="w-full bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800"
-          >
-            Calculate Section
-          </button>
-        </div>
+        <p className="pt-1 text-xs text-gray-500">
+          Section properties and the drawing update as you type. Thickness
+          is shared with the steel stud thickness (tF).
+        </p>
 
       </div>
     </section>

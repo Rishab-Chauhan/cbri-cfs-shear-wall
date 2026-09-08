@@ -1,19 +1,13 @@
 import { useMemo } from "react";
 import { calculateSectionProperties } from "../calculations/sectionProperties";
 
-function SectionProperties({ section, onPropertiesCalculated }) {
+function SectionProperties({ section }) {
   const properties = useMemo(() => {
-    const result = calculateSectionProperties(section);
-
-    if (onPropertiesCalculated) {
-      onPropertiesCalculated(result);
-    }
-
-    return result;
-  }, [section, onPropertiesCalculated]);
+    return calculateSectionProperties(section);
+  }, [section]);
 
   return (
-    <section className="mt-6 border border-gray-300 bg-white">
+    <section className="border border-gray-300 bg-white">
 
       {/* HEADER */}
       <div className="border-b border-gray-300 bg-slate-50 px-6 py-4">
@@ -40,7 +34,7 @@ function SectionProperties({ section, onPropertiesCalculated }) {
 
         ) : (
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
             {/* AREA */}
 
@@ -83,6 +77,18 @@ function SectionProperties({ section, onPropertiesCalculated }) {
             <PropertyCard
               label="Moment of Inertia (Iy)"
               value={properties.Iy}
+              unit="mm⁴"
+            />
+
+            <PropertyCard
+              label="Intermediate Stud IF"
+              value={properties.IF_intermediate}
+              unit="mm⁴"
+            />
+
+            <PropertyCard
+              label="Double End-Stud IF"
+              value={properties.IF_end}
               unit="mm⁴"
             />
 

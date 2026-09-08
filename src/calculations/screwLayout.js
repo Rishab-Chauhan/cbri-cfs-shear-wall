@@ -3,26 +3,24 @@
  *
  * Generates screw coordinates for the shear-wall panel.
  *
- * Coordinate system:
- *   x = panel length direction
- *   y = panel height direction
+ * Coordinate system (thesis / test03.py):
+ *   (0, 0) = centre of wall / fastener group
+ *   x = horizontal direction
+ *   y = vertical direction
  *
- * Origin:
- *   bottom-left corner
- *
- * Units:
- *   mm
+ * Units: mm
  */
 
+function nearestInteger(value) {
+  return Math.floor(value + 0.5);
+}
+
 /**
- * Generate equally spaced positions.
- *
- * The specified spacing is treated as the nominal spacing.
- * The final segment is allowed to be shorter than the specified spacing.
+ * Generate equally spaced positions from 0 to totalLength.
+ * The final segment may be shorter than the specified spacing.
  */
 function createLinePositions(totalLength, spacing) {
   const positions = [0];
-
   let position = spacing;
 
   while (position < totalLength) {
@@ -30,7 +28,6 @@ function createLinePositions(totalLength, spacing) {
     position += spacing;
   }
 
-  // Always include the opposite end.
   if (positions[positions.length - 1] !== totalLength) {
     positions.push(totalLength);
   }
@@ -38,10 +35,7 @@ function createLinePositions(totalLength, spacing) {
   return positions;
 }
 
-/**
- * Add screw location only if it does not already exist.
- */
-function addScrew(locations, x, y, type) {
+function addScrew(locations, x, y, type, location) {
   const exists = locations.some(
     (point) =>
       Math.abs(point.x - x) < 1e-9 &&
@@ -53,101 +47,125 @@ function addScrew(locations, x, y, type) {
       x,
       y,
       type,
+      location,
     });
   }
 }
 
+function toCenterOrigin(locations, panelLength, panelHeight) {
+  return locations.map((point) => ({
+    ...point,
+    x: point.x - panelLength / 2,
+    y: point.y - panelHeight / 2,
+  }));
+}
+
 /**
- * Control specimen
+ * Thesis control specimen (test03.py).
  *
- * Layout:
- *
- * ●────────────●
- * │     │      │
- * │     │      │
- * │     │      │
- * ●     │      ●
- * │     │      │
- * │     │      │
- * ●─────┴──────●
- *
- * Perimeter:
- *   perimeterSpacing
- *
- * Intermediate vertical stud:
- *   fieldSpacing
+ * Perimeter screws at EDGE spacing (equalized).
+ * One centered intermediate stud.
+ * Field screws at FIELD spacing (equalized).
+ * Origin at the wall centre.
  */
-function generateControlLayout({
+function generateThesisControlLayout({
   panelHeight,
   panelLength,
   perimeterSpacing,
   fieldSpacing,
 }) {
-  const locations = [];
+  const L = panelLength;
+  const H = panelHeight;
 
-  const perimeterX = createLinePositions(
-    panelLength,
-    perimeterSpacing
-  );
+  let nx = Math.max(1, nearestInteger(L / perimeterSpacing));
+  let ny = Math.max(2, nearestInteger(H / perimeterSpacing));
 
-  const perimeterY = createLinePositions(
-    panelHeight,
-    perimeterSpacing
-  );
+  if (ny % 2 !== 0) {
+    ny += 1;
+  }
 
-  // Top and bottom perimeter
-  perimeterX.forEach((x) => {
-    addScrew(locations, x, 0, "perimeter");
-    addScrew(locations, x, panelHeight, "perimeter");
-  });
+  const actualXSpacing = L / nx;
+  const actualYSpacing = H / ny;
 
-  // Left and right perimeter
-  perimeterY.forEach((y) => {
-    addScrew(locations, 0, y, "perimeter");
-    addScrew(locations, panelLength, y, "perimeter");
-  });
+  let nField = Math.max(2, nearestInteger(H / fieldSpacing));
 
-  // One vertical intermediate stud
-  const intermediateX = panelLength / 2;
+  if (nField % 2 !== 0) {
+    nField += 1;
+  }
 
-  const fieldY = createLinePositions(
-    panelHeight,
-    fieldSpacing
-  );
+  const actualFieldSpacing = H / nField;
+  const screws = [];
 
-  fieldY.forEach((y) => {
-    addScrew(
-      locations,
-      intermediateX,
+  for (let i = 0; i <= nx; i += 1) {
+    screws.push({
+      x: -L / 2 + i * actualXSpacing,
+      y: H / 2,
+      type: "perimeter",
+      location: "Top edge",
+    });
+  }
+
+  for (let j = 1; j < ny; j += 1) {
+    screws.push({
+      x: L / 2,
+      y: H / 2 - j * actualYSpacing,
+      type: "perimeter",
+      location: "Right edge",
+    });
+  }
+
+  for (let i = nx; i >= 0; i -= 1) {
+    screws.push({
+      x: -L / 2 + i * actualXSpacing,
+      y: -H / 2,
+      type: "perimeter",
+      location: "Bottom edge",
+    });
+  }
+
+  for (let j = ny - 1; j > 0; j -= 1) {
+    screws.push({
+      x: -L / 2,
+      y: -H / 2 + j * actualYSpacing,
+      type: "perimeter",
+      location: "Left edge",
+    });
+  }
+
+  for (let k = 1; k < nField; k += 1) {
+    const y = -H / 2 + k * actualFieldSpacing;
+
+    if (Math.abs(y - H / 2) < 1e-9) {
+      continue;
+    }
+
+    if (Math.abs(y + H / 2) < 1e-9) {
+      continue;
+    }
+
+    screws.push({
+      x: 0.0,
       y,
-      "field"
-    );
-  });
+      type: "field",
+      location: "Intermediate stud",
+    });
+  }
 
-  return locations;
+  return {
+    screws,
+    nx,
+    ny,
+    nField,
+    actualXSpacing,
+    actualYSpacing,
+    actualFieldSpacing,
+  };
 }
 
 /**
- * Intermediate bracing specimen
+ * Intermediate bracing specimen.
  *
- * Layout:
- *
- * ●────────────●
- * │     │      │
- * ●─────┼──────●
- * │     │      │
- * ●─────┼──────●
- * │     │      │
- * ●─────┴──────●
- *
- * Perimeter screws:
- *   perimeterSpacing
- *
- * Vertical intermediate stud:
- *   fieldSpacing
- *
- * Horizontal intermediate bracing:
- *   horizontalSpacing
+ * Generated in bottom-left origin, then converted to centre origin.
  */
 function generateIntermediateBracingLayout({
   panelHeight,
@@ -158,92 +176,46 @@ function generateIntermediateBracingLayout({
 }) {
   const locations = [];
 
-  const perimeterX = createLinePositions(
-    panelLength,
-    perimeterSpacing
-  );
+  const perimeterX = createLinePositions(panelLength, perimeterSpacing);
+  const perimeterY = createLinePositions(panelHeight, perimeterSpacing);
 
-  const perimeterY = createLinePositions(
-    panelHeight,
-    perimeterSpacing
-  );
-
-  // Top and bottom perimeter
   perimeterX.forEach((x) => {
-    addScrew(locations, x, 0, "perimeter");
-    addScrew(locations, x, panelHeight, "perimeter");
+    addScrew(locations, x, 0, "perimeter", "Bottom edge");
+    addScrew(locations, x, panelHeight, "perimeter", "Top edge");
   });
 
-  // Left and right perimeter
   perimeterY.forEach((y) => {
-    addScrew(locations, 0, y, "perimeter");
-    addScrew(locations, panelLength, y, "perimeter");
+    addScrew(locations, 0, y, "perimeter", "Left edge");
+    addScrew(locations, panelLength, y, "perimeter", "Right edge");
   });
 
-  // Vertical intermediate stud
   const intermediateX = panelLength / 2;
-
-  const fieldY = createLinePositions(
-    panelHeight,
-    fieldSpacing
-  );
+  const fieldY = createLinePositions(panelHeight, fieldSpacing);
 
   fieldY.forEach((y) => {
-    addScrew(
-      locations,
-      intermediateX,
-      y,
-      "field"
-    );
+    addScrew(locations, intermediateX, y, "field", "Intermediate stud");
   });
 
-  // Horizontal intermediate bracing lines
-  const horizontalY = createLinePositions(
-    panelHeight,
-    horizontalSpacing
-  );
+  const horizontalY = createLinePositions(panelHeight, horizontalSpacing);
 
   horizontalY.forEach((y) => {
     if (y === 0 || y === panelHeight) {
       return;
     }
 
-    const horizontalX = createLinePositions(
-      panelLength,
-      fieldSpacing
-    );
+    const horizontalX = createLinePositions(panelLength, fieldSpacing);
 
     horizontalX.forEach((x) => {
-      addScrew(
-        locations,
-        x,
-        y,
-        "horizontal-field"
-      );
+      addScrew(locations, x, y, "horizontal-field", "Horizontal bracing");
     });
 
-    // Ensure intersections with perimeter are present.
-    addScrew(
-      locations,
-      0,
-      y,
-      "horizontal-field"
-    );
-
-    addScrew(
-      locations,
-      panelLength,
-      y,
-      "horizontal-field"
-    );
+    addScrew(locations, 0, y, "horizontal-field", "Horizontal bracing");
+    addScrew(locations, panelLength, y, "horizontal-field", "Horizontal bracing");
   });
 
-  return locations;
+  return toCenterOrigin(locations, panelLength, panelHeight);
 }
 
-/**
- * Main calculation.
- */
 export function calculateScrewLayout(inputs) {
   const {
     mode = "manual",
@@ -273,32 +245,30 @@ export function calculateScrewLayout(inputs) {
     };
   }
 
-  // -----------------------------
-  // MANUAL MODE
-  // -----------------------------
-
   if (mode === "manual") {
     const nC = Number(totalScrews);
 
     if (!Number.isFinite(nC) || nC <= 0) {
       return {
         success: false,
-        error:
-          "Total number of screws must be greater than zero.",
+        error: "Total number of screws must be greater than zero.",
       };
     }
 
     return {
       success: true,
       mode: "manual",
+      origin: "center",
       totalScrews: Math.floor(nC),
       screwLocations: [],
+      nx: null,
+      ny: null,
+      nField: null,
+      actualXSpacing: null,
+      actualYSpacing: null,
+      actualFieldSpacing: null,
     };
   }
-
-  // -----------------------------
-  // AUTOMATIC MODE
-  // -----------------------------
 
   if (mode !== "automatic") {
     return {
@@ -313,63 +283,77 @@ export function calculateScrewLayout(inputs) {
   if (!Number.isFinite(perimeter) || perimeter <= 0) {
     return {
       success: false,
-      error:
-        "Perimeter screw spacing must be greater than zero.",
+      error: "Perimeter screw spacing must be greater than zero.",
     };
   }
 
   if (!Number.isFinite(field) || field <= 0) {
     return {
       success: false,
-      error:
-        "Field/intermediate screw spacing must be greater than zero.",
+      error: "Field/intermediate screw spacing must be greater than zero.",
     };
   }
 
-  let screwLocations = [];
-
   if (specimenType === "control") {
-    screwLocations = generateControlLayout({
+    const layout = generateThesisControlLayout({
       panelHeight: h,
       panelLength: l,
       perimeterSpacing: perimeter,
       fieldSpacing: field,
     });
+
+    return {
+      success: true,
+      mode: "automatic",
+      origin: "center",
+      specimenType,
+      totalScrews: layout.screws.length,
+      screwLocations: layout.screws,
+      nx: layout.nx,
+      ny: layout.ny,
+      nField: layout.nField,
+      actualXSpacing: layout.actualXSpacing,
+      actualYSpacing: layout.actualYSpacing,
+      actualFieldSpacing: layout.actualFieldSpacing,
+    };
   }
 
-  else if (specimenType === "intermediateBracing") {
+  if (specimenType === "intermediateBracing") {
     const horizontal = Number(horizontalSpacing);
 
     if (!Number.isFinite(horizontal) || horizontal <= 0) {
       return {
         success: false,
-        error:
-          "Horizontal intermediate spacing must be greater than zero.",
+        error: "Horizontal intermediate spacing must be greater than zero.",
       };
     }
 
-    screwLocations =
-      generateIntermediateBracingLayout({
-        panelHeight: h,
-        panelLength: l,
-        perimeterSpacing: perimeter,
-        fieldSpacing: field,
-        horizontalSpacing: horizontal,
-      });
-  }
+    const screwLocations = generateIntermediateBracingLayout({
+      panelHeight: h,
+      panelLength: l,
+      perimeterSpacing: perimeter,
+      fieldSpacing: field,
+      horizontalSpacing: horizontal,
+    });
 
-  else {
     return {
-      success: false,
-      error: "Invalid specimen type.",
+      success: true,
+      mode: "automatic",
+      origin: "center",
+      specimenType,
+      totalScrews: screwLocations.length,
+      screwLocations,
+      nx: null,
+      ny: null,
+      nField: null,
+      actualXSpacing: null,
+      actualYSpacing: null,
+      actualFieldSpacing: null,
     };
   }
 
   return {
-    success: true,
-    mode: "automatic",
-    specimenType,
-    totalScrews: screwLocations.length,
-    screwLocations,
+    success: false,
+    error: "Invalid specimen type.",
   };
 }

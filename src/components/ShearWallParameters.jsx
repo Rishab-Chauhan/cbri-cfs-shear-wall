@@ -57,6 +57,7 @@ function SectionTitle({ children }) {
 export default function ShearWallParameters({
   parameters,
   onChange,
+  sectionProperties = null,
 }) {
   /* -----------------------------------------------------
      SHEATHING MODULUS CALCULATION
@@ -879,61 +880,41 @@ export default function ShearWallParameters({
           Frame Parameters
         </SectionTitle>
 
+        <p className="mb-4 text-sm text-gray-500">
+          Stud moments of inertia are calculated automatically from the
+          C-section geometry below. Intermediate stud = 1 C-section.
+          Double end stud = 2 C-sections.
+        </p>
+
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
 
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              Intermediate Stud IF
+            </p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">
+              {sectionProperties?.IF_intermediate != null
+                ? Number(sectionProperties.IF_intermediate).toFixed(3)
+                : "—"}
+              <span className="ml-1 text-sm font-normal text-gray-500">
+                mm⁴
+              </span>
+            </p>
+          </div>
 
-          {/* End Stud I */}
-
-          <ScientificInput
-            label="End Stud Moment of Inertia (IF)"
-            value={
-              parameters.endStudMomentOfInertia
-            }
-            unit="mm⁴"
-            onChange={(value) =>
-              onChange(
-                "endStudMomentOfInertia",
-                value
-              )
-            }
-          />
-
-
-          {/* Intermediate Stud I */}
-
-          <ScientificInput
-            label="Intermediate Stud Moment of Inertia (IF)"
-            value={
-              parameters.intermediateStudMomentOfInertia
-            }
-            unit="mm⁴"
-            onChange={(value) =>
-              onChange(
-                "intermediateStudMomentOfInertia",
-                value
-              )
-            }
-          />
-
-
-          {/* Number of intermediate studs */}
-
-          <ParameterInput
-            label="Intermediate Studs"
-            value={
-              parameters.numberOfIntermediateStuds
-            }
-            unit="No."
-            onChange={(value) =>
-              onChange(
-                "numberOfIntermediateStuds",
-                value
-              )
-            }
-          />
-
-
-          {/* Pn */}
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              Double End-Stud IF
+            </p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">
+              {sectionProperties?.IF_end != null
+                ? Number(sectionProperties.IF_end).toFixed(3)
+                : "—"}
+              <span className="ml-1 text-sm font-normal text-gray-500">
+                mm⁴
+              </span>
+            </p>
+          </div>
 
           <ParameterInput
             label="Nominal Compression Strength (Pn)"
