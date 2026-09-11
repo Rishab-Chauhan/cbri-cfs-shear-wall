@@ -187,35 +187,12 @@ function App() {
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8">
-        <section className="rounded-lg border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-6 py-5">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Shear Wall Parameters
-            </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Enter the panel, material, sheathing and screw parameters. Stud
-              moments of inertia are calculated from the C-section below.
-            </p>
-          </div>
-
-          <div className="p-6">
-            <ShearWallParameters
-              parameters={parameters}
-              onChange={handleParameterChange}
-              sectionProperties={sectionProperties}
-            />
-          </div>
-        </section>
-
-        <section className="mt-8 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-200 px-6 py-5">
             <h2 className="text-lg font-semibold text-gray-900">
               CFS C-Section
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Intermediate-stud IF is Iy of one C-section. Double end-stud IF
-              is calculated from two C-sections.
-            </p>
+         
           </div>
 
           <div className="grid grid-cols-1 gap-0 lg:grid-cols-2">
@@ -228,6 +205,26 @@ function App() {
 
           <div className="border-t border-gray-200 p-6">
             <SectionProperties section={section} />
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-200 px-6 py-5">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Shear Wall Parameters
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Enter the panel, material, sheathing and screw parameters. Stud
+              moments of inertia come from the C-section above.
+            </p>
+          </div>
+
+          <div className="p-6">
+            <ShearWallParameters
+              parameters={parameters}
+              onChange={handleParameterChange}
+              sectionProperties={sectionProperties}
+            />
           </div>
         </section>
 

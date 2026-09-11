@@ -80,14 +80,10 @@ function SectionProperties({ section }) {
               unit="mm⁴"
             />
 
-            <PropertyCard
-              label="Intermediate Stud IF"
-              value={properties.IF_intermediate}
-              unit="mm⁴"
-            />
+     
 
             <PropertyCard
-              label="Double End-Stud IF"
+              label="Moment of inertia of the double end-stud IF"
               value={properties.IF_end}
               unit="mm⁴"
             />

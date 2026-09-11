@@ -767,7 +767,7 @@ export default function ShearWallParameters({
               {/* Perimeter */}
 
               <ParameterInput
-                label="Perimeter Screw Spacing"
+                label="Screw Spacing on the sheathing perimeter Sc"
                 value={
                   parameters.perimeterSpacing
                 }
@@ -784,7 +784,7 @@ export default function ShearWallParameters({
               {/* Vertical */}
 
               <ParameterInput
-                label="Vertical Intermediate Spacing"
+                label="Screw Field Spacing"
                 value={
                   parameters.fieldSpacing
                 }
@@ -826,112 +826,7 @@ export default function ShearWallParameters({
       </div>
 
 
-      {/* =================================================
-          SCREW RESISTANCES
-      ================================================= */}
 
-      <div>
-
-        <SectionTitle>
-          Screw Resistance
-        </SectionTitle>
-
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
-          <ParameterInput
-            label="Screw Shear Resistance"
-            value={
-              parameters.vrSScrew
-            }
-            unit="N"
-            onChange={(value) =>
-              onChange(
-                "vrSScrew",
-                value
-              )
-            }
-          />
-
-          <ParameterInput
-            label="Screw Pullout Resistance"
-            value={
-              parameters.vrPScrew
-            }
-            unit="N"
-            onChange={(value) =>
-              onChange(
-                "vrPScrew",
-                value
-              )
-            }
-          />
-
-        </div>
-      </div>
-
-
-      {/* =================================================
-          FRAME PARAMETERS
-      ================================================= */}
-
-      <div>
-
-        <SectionTitle>
-          Frame Parameters
-        </SectionTitle>
-
-        <p className="mb-4 text-sm text-gray-500">
-          Stud moments of inertia are calculated automatically from the
-          C-section geometry below. Intermediate stud = 1 C-section.
-          Double end stud = 2 C-sections.
-        </p>
-
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-
-          <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              Intermediate Stud IF
-            </p>
-            <p className="mt-1 text-lg font-semibold text-gray-900">
-              {sectionProperties?.IF_intermediate != null
-                ? Number(sectionProperties.IF_intermediate).toFixed(3)
-                : "—"}
-              <span className="ml-1 text-sm font-normal text-gray-500">
-                mm⁴
-              </span>
-            </p>
-          </div>
-
-          <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              Double End-Stud IF
-            </p>
-            <p className="mt-1 text-lg font-semibold text-gray-900">
-              {sectionProperties?.IF_end != null
-                ? Number(sectionProperties.IF_end).toFixed(3)
-                : "—"}
-              <span className="ml-1 text-sm font-normal text-gray-500">
-                mm⁴
-              </span>
-            </p>
-          </div>
-
-          <ParameterInput
-            label="Nominal Compression Strength (Pn)"
-            value={
-              parameters.nominalCompressionStrength
-            }
-            unit="N"
-            onChange={(value) =>
-              onChange(
-                "nominalCompressionStrength",
-                value
-              )
-            }
-          />
-
-        </div>
-      </div>
 
     </div>
   );
