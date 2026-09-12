@@ -1,25 +1,56 @@
-import { useMemo, useState } from "react";
-
+import { useState } from "react";
+import TopNavigation from "./components/TopNavigation";
+import SectionPropertiesPage from "./components/SectionPropertiesPage";
 import ShearWallParameters from "./components/ShearWallParameters";
-import Results from "./components/Results";
-import SectionDrawing from "./components/SectionDrawing";
-import SectionInput from "./components/SectionInput";
-import SectionProperties from "./components/SectionProperties";
 import { calculateScrewLayout } from "./calculations/screwLayout";
 import { calculateLateralStrength } from "./calculations/lateralStrength";
-import { calculateSectionProperties } from "./calculations/sectionProperties";
+import { calculateSectionFromInputs } from "./calculations/sectionProperties";
+
+const DEFAULT_SECTION = {
+  webLength: 92,
+  flangeWidth: 41,
+  lipLength: 12.7,
+  thickness: 1.12,
+};
+
+const DEFAULT_NODES = [
+  { id: 1, x: 0, y: 0 },
+  { id: 2, x: 92, y: 0 },
+  { id: 3, x: 92, y: 41 },
+  { id: 4, x: 0, y: 41 },
+];
+
+function steelG(eSteel, poissonRatio) {
+  const E = Number(eSteel);
+  const mu = Number(poissonRatio);
+  if (!Number.isFinite(E) || !Number.isFinite(mu) || mu <= -1) {
+    return 99509.804;
+  }
+  return Number((E / (2 * (1 + mu))).toFixed(3));
+}
 
 function App() {
+  const [activeView, setActiveView] = useState("section");
+  const [method, setMethod] = useState("selection");
+  const [sectionType, setSectionType] = useState("C");
+  const [section, setSection] = useState(DEFAULT_SECTION);
+  const [nodes, setNodes] = useState(DEFAULT_NODES);
+  const [edges, setEdges] = useState([]);
+  const [plotted, setPlotted] = useState({ nodes: [], edges: [] });
+  const [sectionResults, setSectionResults] = useState(null);
+  const [sectionCalculated, setSectionCalculated] = useState(false);
+  const [sectionStale, setSectionStale] = useState(false);
+  const [sectionError, setSectionError] = useState("");
+
   const [parameters, setParameters] = useState({
     panelHeight: 2438,
     panelLength: 1219,
-
     fySteel: 230,
     fuSteel: 344,
     eSteel: 203000,
+    gSteel: steelG(203000, 0.02),
     tF: 1.12,
     poissonRatio: 0.02,
-
     sheathingConfiguration: "single",
     sheathingMaterial: "FCB",
     tS: 12.5,
@@ -27,93 +58,108 @@ function App() {
     sheathingPoissonRatio: 0.02,
     eSheathing: 10445,
     gSheathing: 825,
-
     sheathingMaterial2: "FCB",
     tS2: 12.5,
     fuSheathing2: 4.5,
     sheathingPoissonRatio2: 0.02,
     eSheathing2: 10445,
     gSheathing2: 825,
-
-    screwMode: "automatic",
     screwType: "No. 8",
     dC: 4.064,
-    nC: 50,
     specimenType: "control",
     perimeterSpacing: 152,
     fieldSpacing: 305,
     horizontalSpacing: 305,
-
     vrSScrew: 3256,
     vrPScrew: 1255,
-
+    numberOfEndCoupledStuds: 2,
+    numberOfSingleStuds: 1,
     numberOfIntermediateStuds: 1,
     nominalCompressionStrength: 71166,
   });
 
-  const [section, setSection] = useState({
-    webLength: 92,
-    flangeWidth: 41,
-    lipLength: 12.7,
-    thickness: 1.12,
-    radius: 0,
-  });
-
   const [result, setResult] = useState(null);
+  const [swStale, setSwStale] = useState(false);
+  const [swError, setSwError] = useState("");
   const [isCalculating, setIsCalculating] = useState(false);
 
-  const sectionProperties = useMemo(
-    () => calculateSectionProperties(section),
-    [section]
-  );
+  const invalidateSection = () => {
+    setSectionCalculated(false);
+    setSectionStale(Boolean(sectionResults));
+    setResult(null);
+    setSwStale(false);
+  };
 
   const handleParameterChange = (key, value) => {
-    setParameters((previous) => ({
-      ...previous,
-      [key]: value,
-    }));
-
-    if (key === "tF") {
-      setSection((previous) => ({
-        ...previous,
-        thickness: value,
-      }));
-    }
+    setParameters((previous) => {
+      const patch =
+        typeof key === "object" && value === undefined ? key : { [key]: value };
+      const next = { ...previous, ...patch };
+      if (patch.numberOfSingleStuds !== undefined) {
+        next.numberOfIntermediateStuds = patch.numberOfSingleStuds;
+      }
+      return next;
+    });
+    setSwStale(Boolean(result));
   };
 
-  const handleSectionChange = (key, value) => {
-    setSection((previous) => ({
-      ...previous,
-      [key]: value,
-    }));
+  const handleSectionFieldChange = (key, value) => {
+    setSection((previous) => ({ ...previous, [key]: value }));
+    invalidateSection();
+  };
 
-    if (key === "thickness") {
+  const handleCalculateSection = () => {
+    const computed = calculateSectionFromInputs({
+      method,
+      sectionType,
+      section,
+      nodes,
+      edges,
+    });
+
+    if (!computed || computed.success === false) {
+      setSectionResults(null);
+      setSectionCalculated(false);
+      setSectionError(computed?.error || "Please enter valid section geometry.");
+      return;
+    }
+
+    setSectionResults(computed);
+    setSectionCalculated(true);
+    setSectionStale(false);
+    setSectionError("");
+
+    if (computed.thickness) {
       setParameters((previous) => ({
         ...previous,
-        tF: value,
+        tF: computed.thickness,
       }));
     }
   };
 
-  const handleCalculate = () => {
+  const handleCalculateShearWall = () => {
+    if (!sectionCalculated || !sectionResults) {
+      setSwError("Complete section properties before calculating the shear wall.");
+      return;
+    }
+
+    const h = Number(parameters.panelHeight);
+    const l = Number(parameters.panelLength);
+    const perimeter = Number(parameters.perimeterSpacing);
+    const field = Number(parameters.fieldSpacing);
+
+    if (![h, l, perimeter, field].every((v) => Number.isFinite(v) && v > 0)) {
+      setSwError("Panel dimensions and screw spacings must be greater than zero.");
+      return;
+    }
+
     setIsCalculating(true);
+    setSwError("");
 
     try {
-      const properties = calculateSectionProperties(section);
-
-      if (!properties) {
-        setResult({
-          success: false,
-          error: "Please enter valid C-section dimensions.",
-        });
-        return;
-      }
-
       const screwLayoutResult = calculateScrewLayout({
-        mode: parameters.screwMode,
         panelHeight: parameters.panelHeight,
         panelLength: parameters.panelLength,
-        totalScrews: parameters.nC,
         specimenType: parameters.specimenType,
         perimeterSpacing: parameters.perimeterSpacing,
         fieldSpacing: parameters.fieldSpacing,
@@ -125,44 +171,61 @@ function App() {
         return;
       }
 
-      const connection = {
-        tS: parameters.tS,
-        dC: parameters.dC,
-        fuSheathing: parameters.fuSheathing,
-        tF: parameters.tF,
-        fuSteel: parameters.fuSteel,
-        vrSScrew: parameters.vrSScrew,
-        vrPScrew: parameters.vrPScrew,
-      };
-
-      const sheathing = {
-        thickness: parameters.tS,
-        youngsModulus: parameters.eSheathing,
-        shearModulus: parameters.gSheathing,
-        screwSpacing: parameters.perimeterSpacing,
-      };
-
-      const frame = {
-        youngsModulus: parameters.eSteel,
-        endStudMomentOfInertia: properties.IF_end,
-        intermediateStudMomentOfInertia: properties.IF_intermediate,
-        numberOfIntermediateStuds: parameters.numberOfIntermediateStuds,
-        nominalCompressionStrength: parameters.nominalCompressionStrength,
-      };
+      const screwLocations = screwLayoutResult.screwLocations;
+      const totalScrews = screwLocations.length;
 
       const calculation = calculateLateralStrength({
         panelHeight: parameters.panelHeight,
         panelLength: parameters.panelLength,
-        connection,
-        screwLayout: screwLayoutResult,
-        sheathing,
-        frame,
-        section: properties,
+        connection: {
+          tS: parameters.tS,
+          dC: parameters.dC,
+          fuSheathing: parameters.fuSheathing,
+          tF: parameters.tF,
+          fuSteel: parameters.fuSteel,
+          vrSScrew: parameters.vrSScrew,
+          vrPScrew: parameters.vrPScrew,
+        },
+        screwLayout: {
+          ...screwLayoutResult,
+          totalScrews,
+          screwLocations,
+        },
+        sheathing: {
+          thickness: parameters.tS,
+          youngsModulus: parameters.eSheathing,
+          shearModulus: parameters.gSheathing,
+          screwSpacing: parameters.perimeterSpacing,
+        },
+        frame: {
+          youngsModulus: parameters.eSteel,
+          endStudMomentOfInertia: sectionResults.IF_end,
+          intermediateStudMomentOfInertia: sectionResults.IF_intermediate,
+          numberOfEndCoupledStuds: parameters.numberOfEndCoupledStuds,
+          numberOfSingleStuds: parameters.numberOfSingleStuds,
+          numberOfIntermediateStuds: parameters.numberOfSingleStuds,
+          nominalCompressionStrength: parameters.nominalCompressionStrength,
+        },
+        section: sectionResults,
       });
 
+      if (calculation.success) {
+        calculation.screwLocations = screwLocations;
+        calculation.totalScrews = totalScrews;
+        calculation.screwDetails = (calculation.screwDetails || []).map(
+          (screw, index) => ({
+            ...screw,
+            number: index + 1,
+            location: screwLocations[index]?.location || screw.location,
+            x: screwLocations[index]?.x ?? screw.x,
+            y: screwLocations[index]?.y ?? screw.y,
+          })
+        );
+      }
+
       setResult(calculation);
+      setSwStale(false);
     } catch (error) {
-      console.error(error);
       setResult({
         success: false,
         error: error.message || "An unexpected calculation error occurred.",
@@ -173,75 +236,63 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-gray-900">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-6">
-          <h1 className="text-2xl font-bold tracking-tight text-blue-700">
-            CFS Shear Wall Calculator
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Martinez thesis simplified procedure — C-section properties,
-            screw coordinates, and lateral strength
-          </p>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-6 py-8">
-        <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-6 py-5">
-            <h2 className="text-lg font-semibold text-gray-900">
-              CFS C-Section
-            </h2>
-         
-          </div>
-
-          <div className="grid grid-cols-1 gap-0 lg:grid-cols-2">
-            <SectionInput
-              section={section}
-              onChange={handleSectionChange}
-            />
-            <SectionDrawing section={section} />
-          </div>
-
-          <div className="border-t border-gray-200 p-6">
-            <SectionProperties section={section} />
-          </div>
-        </section>
-
-        <section className="mt-8 rounded-lg border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-6 py-5">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Shear Wall Parameters
-            </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Enter the panel, material, sheathing and screw parameters. Stud
-              moments of inertia come from the C-section above.
-            </p>
-          </div>
-
-          <div className="p-6">
-            <ShearWallParameters
-              parameters={parameters}
-              onChange={handleParameterChange}
-              sectionProperties={sectionProperties}
-            />
-          </div>
-        </section>
-
-        <div className="mt-8">
-          <button
-            type="button"
-            onClick={handleCalculate}
-            disabled={isCalculating}
-            className="rounded-md bg-blue-700 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isCalculating ? "Calculating..." : "Calculate"}
-          </button>
-        </div>
-
-        <section className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <Results result={result} />
-        </section>
+    <div className="flex h-full min-h-0 flex-col bg-[#e8eef4] text-slate-900">
+      <TopNavigation
+        activeView={activeView}
+        sectionCalculated={sectionCalculated}
+        onChangeView={setActiveView}
+      />
+      <main className="min-h-0 flex-1 overflow-hidden">
+        {activeView === "section" ? (
+          <SectionPropertiesPage
+            method={method}
+            sectionType={sectionType}
+            section={section}
+            nodes={nodes}
+            edges={edges}
+            plotted={plotted}
+            results={sectionResults}
+            error={sectionError}
+            stale={sectionStale}
+            sectionCalculated={sectionCalculated}
+            onChangeMethod={(next) => {
+              setMethod(next);
+              invalidateSection();
+            }}
+            onChangeType={(next) => {
+              setSectionType(next);
+              invalidateSection();
+            }}
+            onChangeSection={handleSectionFieldChange}
+            onChangeNodes={setNodes}
+            onChangeEdges={setEdges}
+            onPlot={(nextNodes, nextEdges) =>
+              setPlotted({
+                nodes: nextNodes,
+                edges: nextEdges,
+              })
+            }
+            onGeometryChange={invalidateSection}
+            onCalculate={handleCalculateSection}
+            onNext={() => {
+              if (sectionCalculated) {
+                setActiveView("sw");
+              }
+            }}
+          />
+        ) : (
+          <ShearWallParameters
+            parameters={parameters}
+            onChange={handleParameterChange}
+            onCalculate={handleCalculateShearWall}
+            isCalculating={isCalculating}
+            result={result}
+            stale={swStale}
+            error={swError}
+            sectionResults={sectionResults}
+            onBack={() => setActiveView("section")}
+          />
+        )}
       </main>
     </div>
   );

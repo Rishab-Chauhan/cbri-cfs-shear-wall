@@ -19,7 +19,7 @@ export function calculateLateralStrength(inputs) {
   } = inputs;
 
   const screwLocations = screwLayout.screwLocations || [];
-  const totalScrews = Number(screwLayout.totalScrews);
+  const totalScrews = screwLocations.length;
 
   const connectionResult = calculateConnectionStrength(connection);
 
@@ -69,6 +69,8 @@ export function calculateLateralStrength(inputs) {
     youngsModulus: frame.youngsModulus,
     endStudMomentOfInertia: frame.endStudMomentOfInertia,
     intermediateStudMomentOfInertia: frame.intermediateStudMomentOfInertia,
+    numberOfEndCoupledStuds: frame.numberOfEndCoupledStuds,
+    numberOfSingleStuds: frame.numberOfSingleStuds,
     numberOfIntermediateStuds: frame.numberOfIntermediateStuds,
   });
 

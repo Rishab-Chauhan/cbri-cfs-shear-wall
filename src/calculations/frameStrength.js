@@ -1,14 +1,20 @@
 /**
  * frameStrength.js
  *
- * Frame stiffness (two double end studs + intermediate studs):
+ * Frame stiffness:
  *
- *   K_end_each     = 3 E IF_end / H³
- *   K_intermediate = 3 E IF_intermediate / H³
- *   Kf = 2 * K_end_each + n_intermediate * K_intermediate
+ *   Kf = n_EndCoupled × (3 Ef IF_doubleEnd / h³)
+ *      + n_Single     × (3 Ef IF_intermediate / h³)
+ *
+ * Existing thesis mapping (preserved):
+ *   End-coupled stud  = double end stud  → IF_end (IF_doubleEnd)
+ *   Single stud       = intermediate C   → IF_intermediate
+ *
+ * Defaults match the previous implementation:
+ *   n_EndCoupled = 2
+ *   n_Single     = 1
  *
  * Frame failure:
- *
  *   Pfc = Pn (L / H)
  */
 
@@ -17,15 +23,20 @@ export function calculateFrameStiffness({
   youngsModulus,
   endStudMomentOfInertia,
   intermediateStudMomentOfInertia,
+  numberOfEndCoupledStuds = 2,
+  numberOfSingleStuds,
   numberOfIntermediateStuds = 1,
 }) {
   const h = Number(panelHeight);
   const E = Number(youngsModulus);
   const IEnd = Number(endStudMomentOfInertia);
   const IIntermediate = Number(intermediateStudMomentOfInertia);
-  const nIntermediate = Number(numberOfIntermediateStuds);
+  const nEnd = Number(numberOfEndCoupledStuds);
+  const nSingle = Number(
+    numberOfSingleStuds ?? numberOfIntermediateStuds ?? 1
+  );
 
-  const values = [h, E, IEnd, IIntermediate, nIntermediate];
+  const values = [h, E, IEnd, IIntermediate, nEnd, nSingle];
 
   if (
     values.some((value) => !Number.isFinite(value) || value < 0) ||
@@ -42,15 +53,17 @@ export function calculateFrameStiffness({
   const KEndEach = (3.0 * E * IEnd) / Math.pow(h, 3);
   const KIntermediate =
     (3.0 * E * IIntermediate) / Math.pow(h, 3);
-  const Kf = 2.0 * KEndEach + nIntermediate * KIntermediate;
+  const Kf = nEnd * KEndEach + nSingle * KIntermediate;
 
   return {
     success: true,
     KEndEach,
     KIntermediate,
     Kf,
-    numberOfEndStuds: 2,
-    numberOfIntermediateStuds: nIntermediate,
+    numberOfEndStuds: nEnd,
+    numberOfEndCoupledStuds: nEnd,
+    numberOfIntermediateStuds: nSingle,
+    numberOfSingleStuds: nSingle,
     IF_end: IEnd,
     IF_intermediate: IIntermediate,
   };

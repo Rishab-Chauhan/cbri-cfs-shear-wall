@@ -218,11 +218,9 @@ function generateIntermediateBracingLayout({
 
 export function calculateScrewLayout(inputs) {
   const {
-    mode = "manual",
     panelHeight,
     panelLength,
-    totalScrews,
-    specimenType,
+    specimenType = "control",
     perimeterSpacing,
     fieldSpacing,
     horizontalSpacing,
@@ -242,38 +240,6 @@ export function calculateScrewLayout(inputs) {
     return {
       success: false,
       error: "Panel length must be greater than zero.",
-    };
-  }
-
-  if (mode === "manual") {
-    const nC = Number(totalScrews);
-
-    if (!Number.isFinite(nC) || nC <= 0) {
-      return {
-        success: false,
-        error: "Total number of screws must be greater than zero.",
-      };
-    }
-
-    return {
-      success: true,
-      mode: "manual",
-      origin: "center",
-      totalScrews: Math.floor(nC),
-      screwLocations: [],
-      nx: null,
-      ny: null,
-      nField: null,
-      actualXSpacing: null,
-      actualYSpacing: null,
-      actualFieldSpacing: null,
-    };
-  }
-
-  if (mode !== "automatic") {
-    return {
-      success: false,
-      error: "Invalid screw calculation mode.",
     };
   }
 
@@ -302,13 +268,17 @@ export function calculateScrewLayout(inputs) {
       fieldSpacing: field,
     });
 
+    const screws = layout.screws.map((screw, index) => ({
+      ...screw,
+      number: index + 1,
+    }));
+
     return {
       success: true,
-      mode: "automatic",
       origin: "center",
       specimenType,
-      totalScrews: layout.screws.length,
-      screwLocations: layout.screws,
+      totalScrews: screws.length,
+      screwLocations: screws,
       nx: layout.nx,
       ny: layout.ny,
       nField: layout.nField,
@@ -336,13 +306,17 @@ export function calculateScrewLayout(inputs) {
       horizontalSpacing: horizontal,
     });
 
+    const numbered = screwLocations.map((screw, index) => ({
+      ...screw,
+      number: index + 1,
+    }));
+
     return {
       success: true,
-      mode: "automatic",
       origin: "center",
       specimenType,
-      totalScrews: screwLocations.length,
-      screwLocations,
+      totalScrews: numbered.length,
+      screwLocations: numbered,
       nx: null,
       ny: null,
       nField: null,

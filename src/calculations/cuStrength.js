@@ -20,11 +20,9 @@ export function calculateCu({
   panelHeight,
   panelLength,
   screwLocations = [],
-  totalScrews,
 }) {
   const h = Number(panelHeight);
   const l = Number(panelLength);
-  const nCInput = Number(totalScrews);
 
   if (!Number.isFinite(h) || h <= 0) {
     return {
@@ -40,17 +38,13 @@ export function calculateCu({
     };
   }
 
-  if (!Number.isFinite(nCInput) || nCInput <= 0) {
-    return {
-      success: false,
-      error: "Total number of screws must be greater than zero.",
-    };
-  }
-
   let locations = screwLocations;
 
   if (!Array.isArray(locations) || locations.length === 0) {
-    locations = generateManualControlLayout(h, l, nCInput);
+    return {
+      success: false,
+      error: "Screw coordinates must be generated from the panel layout.",
+    };
   }
 
   const actualNC = locations.length;
@@ -128,72 +122,5 @@ export function calculateCu({
     normalizedForce,
     screwDistances: screwDetails,
     screwDetails,
-    generatedForCu: !screwLocations || screwLocations.length === 0,
   };
-}
-
-function generateManualControlLayout(panelHeight, panelLength, nC) {
-  const locations = [];
-
-  const addScrew = (x, y, location) => {
-    const exists = locations.some(
-      (point) =>
-        Math.abs(point.x - x) < 1e-9 && Math.abs(point.y - y) < 1e-9
-    );
-
-    if (!exists) {
-      locations.push({ x, y, location, type: "generated" });
-    }
-  };
-
-  const perimeterCount = Math.max(4, Math.floor(nC * 0.75));
-  const internalCount = Math.max(1, nC - perimeterCount);
-
-  for (let i = 0; i < perimeterCount; i += 1) {
-    const position = i / perimeterCount;
-    const perimeter = 2 * (panelLength + panelHeight);
-    const distance = position * perimeter;
-
-    let x;
-    let y;
-    let location;
-
-    if (distance <= panelLength) {
-      x = distance;
-      y = 0;
-      location = "Bottom edge";
-    } else if (distance <= panelLength + panelHeight) {
-      x = panelLength;
-      y = distance - panelLength;
-      location = "Right edge";
-    } else if (distance <= 2 * panelLength + panelHeight) {
-      x = panelLength - (distance - panelLength - panelHeight);
-      y = panelHeight;
-      location = "Top edge";
-    } else {
-      x = 0;
-      y = panelHeight - (distance - 2 * panelLength - panelHeight);
-      location = "Left edge";
-    }
-
-    addScrew(x - panelLength / 2, y - panelHeight / 2, location);
-  }
-
-  const xMiddle = 0;
-
-  for (let i = 0; i < internalCount; i += 1) {
-    const y =
-      (i / Math.max(internalCount - 1, 1)) * panelHeight - panelHeight / 2;
-    addScrew(xMiddle, y, "Intermediate stud");
-  }
-
-  let extraIndex = 1;
-
-  while (locations.length < nC) {
-    const y = (extraIndex / (nC + 1)) * panelHeight - panelHeight / 2;
-    addScrew(xMiddle, y, "Intermediate stud");
-    extraIndex += 1;
-  }
-
-  return locations.slice(0, nC);
 }

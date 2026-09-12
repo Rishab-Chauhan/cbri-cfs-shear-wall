@@ -1,457 +1,130 @@
-function SectionDrawing({ section }) {
-  const {
-    webLength,
-    flangeWidth,
-    lipLength,
-    thickness,
-    radius,
-  } = section;
+function cPath({ left, right, top, bottom, C, T, mirrored }) {
+  if (!mirrored) {
+    return `
+      M ${left} ${top}
+      L ${right} ${top}
+      L ${right} ${top + C}
+      L ${right - T} ${top + C}
+      L ${right - T} ${top + T}
+      L ${left + T} ${top + T}
+      L ${left + T} ${bottom - T}
+      L ${right - T} ${bottom - T}
+      L ${right - T} ${bottom - C}
+      L ${right} ${bottom - C}
+      L ${right} ${bottom}
+      L ${left} ${bottom}
+      Z
+    `;
+  }
 
-  // ------------------------------------------------------------
-  // INPUT VALUES
-  // ------------------------------------------------------------
+  return `
+    M ${right} ${top}
+    L ${left} ${top}
+    L ${left} ${top + C}
+    L ${left + T} ${top + C}
+    L ${left + T} ${top + T}
+    L ${right - T} ${top + T}
+    L ${right - T} ${bottom - T}
+    L ${left + T} ${bottom - T}
+    L ${left + T} ${bottom - C}
+    L ${left} ${bottom - C}
+    L ${left} ${bottom}
+    L ${right} ${bottom}
+    Z
+  `;
+}
 
-  const h = Math.max(Number(webLength) || 0, 1);
-  const b = Math.max(Number(flangeWidth) || 0, 1);
-  const c = Math.max(Number(lipLength) || 0, 0);
-  const t = Math.max(Number(thickness) || 0, 0.01);
-  const r = Math.max(Number(radius) || 0, 0);
+export default function SectionDrawing({ section, type = "C" }) {
+  const h = Math.max(Number(section.webLength) || 0, 1);
+  const b = Math.max(Number(section.flangeWidth) || 0, 1);
+  const c = Math.max(Number(section.lipLength) || 0, 0);
+  const t = Math.max(Number(section.thickness) || 0, 0.01);
 
-  // ------------------------------------------------------------
-  // SVG SIZE
-  // ------------------------------------------------------------
+  const svgWidth = 360;
+  const svgHeight = 280;
+  const availableWidth = type === "I" ? 280 : 200;
+  const availableHeight = 210;
+  const totalWidth = type === "I" ? b * 2 : b;
 
-  const svgWidth = 520;
-  const svgHeight = 520;
-
-  const availableWidth = 300;
-  const availableHeight = 360;
-
-  // ------------------------------------------------------------
-  // SCALE
-  // ------------------------------------------------------------
-
-  const scale = Math.min(
-    availableWidth / b,
-    availableHeight / h
-  );
-
-  const drawWidth = b * scale;
-  const drawHeight = h * scale;
-
-  const startX = (svgWidth - drawWidth) / 2;
-  const startY = (svgHeight - drawHeight) / 2 - 10;
-
-  // Actual drawing dimensions
-  const H = h * scale;
+  const scale = Math.min(availableWidth / totalWidth, availableHeight / h);
   const B = b * scale;
+  const H = h * scale;
   const C = c * scale;
-  const T = t * scale;
+  const T = Math.max(t * scale, 1.2);
 
-  // Radius used for the drawing
-  const R = Math.min(
-    r * scale,
-    B / 2,
-    C > 0 ? C : B / 2,
-    H / 2
-  );
+  const drawWidth = type === "I" ? B * 2 : B;
+  const startX = (svgWidth - drawWidth) / 2;
+  const startY = (svgHeight - H) / 2;
 
-  // Inner radius cannot be negative
-  const RI = Math.max(R - T, 0);
-
-  const left = startX;
-  const right = startX + B;
+  const left = type === "I" ? startX + B : startX;
+  const right = left + B;
   const top = startY;
   const bottom = startY + H;
 
-  // ------------------------------------------------------------
-  // SECTION PATH
-  // ------------------------------------------------------------
-  //
-  // The path represents the ACTUAL STEEL MATERIAL.
-  //
-  // It follows:
-  //
-  // OUTER SURFACE
-  //      ↓
-  //      top flange
-  //      top lip
-  //      bottom lip
-  //      bottom flange
-  //      web
-  //
-  // then returns along the INNER SURFACE.
-  //
-  // ------------------------------------------------------------
-
-  let sectionPath = "";
-
-  // ============================================================
-  // RADIUS = 0
-  // ============================================================
-
-  if (R === 0) {
-    sectionPath = `
-      M ${left} ${top}
-
-      L ${right} ${top}
-
-      L ${right} ${top + C}
-
-      L ${right - T} ${top + C}
-
-      L ${right - T} ${top + T}
-
-      L ${left + T} ${top + T}
-
-      L ${left + T} ${bottom - T}
-
-      L ${right - T} ${bottom - T}
-
-      L ${right - T} ${bottom - C}
-
-      L ${right} ${bottom - C}
-
-      L ${right} ${bottom}
-
-      L ${left} ${bottom}
-
-      Z
-    `;
-  }
-
-  // ============================================================
-  // RADIUS > 0
-  // ============================================================
-
-  else {
-    /*
-     * The inside radius is:
-     *
-     * Ri = Ro - t
-     *
-     * which preserves the actual steel thickness through
-     * the bend.
-     */
-
-    const outerR = R;
-    const innerR = RI;
-
-    // ----------------------------------------------------------
-    // TOP WEB / FLANGE BEND
-    // ----------------------------------------------------------
-
-    const topOuterStartX = left + outerR;
-    const topOuterWebY = top + outerR;
-
-    const topInnerStartX = left + T + innerR;
-    const topInnerWebY = top + T + innerR;
-
-    // ----------------------------------------------------------
-    // BOTTOM WEB / FLANGE BEND
-    // ----------------------------------------------------------
-
-    const bottomOuterStartX = left + outerR;
-    const bottomOuterWebY = bottom - outerR;
-
-    const bottomInnerStartX = left + T + innerR;
-    const bottomInnerWebY = bottom - T - innerR;
-
-    // ----------------------------------------------------------
-    // TOP FLANGE / LIP BEND
-    // ----------------------------------------------------------
-
-    const topLipOuterY = top + C;
-    const topLipInnerY = top + C;
-
-    // ----------------------------------------------------------
-    // BOTTOM FLANGE / LIP BEND
-    // ----------------------------------------------------------
-
-    const bottomLipOuterY = bottom - C;
-    const bottomLipInnerY = bottom - C;
-
-    sectionPath = `
-      M ${topOuterStartX} ${top}
-
-      L ${right - outerR} ${top}
-
-      Q ${right} ${top}
-        ${right} ${top + outerR}
-
-      L ${right} ${topLipOuterY}
-
-      L ${right - T} ${topLipInnerY}
-
-      L ${right - T} ${top + T + innerR}
-
-      Q ${right - T} ${top + T}
-        ${right - T - innerR} ${top + T}
-
-      L ${topInnerStartX} ${top + T}
-
-      Q ${left + T} ${top + T}
-        ${left + T} ${topInnerWebY}
-
-      L ${left + T} ${bottomInnerWebY}
-
-      Q ${left + T} ${bottom - T}
-        ${left + T + innerR} ${bottom - T}
-
-      L ${right - T - innerR} ${bottom - T}
-
-      Q ${right - T} ${bottom - T}
-        ${right - T} ${bottom - T - innerR}
-
-      L ${right - T} ${bottomLipInnerY}
-
-      L ${right} ${bottomLipOuterY}
-
-      L ${right} ${bottom - outerR}
-
-      Q ${right} ${bottom}
-        ${right - outerR} ${bottom}
-
-      L ${bottomOuterStartX} ${bottom}
-
-      Q ${left} ${bottom}
-        ${left} ${bottom - outerR}
-
-      L ${left} ${top + outerR}
-
-      Q ${left} ${top}
-        ${topOuterStartX} ${top}
-
-      Z
-    `;
-  }
-
-  // ------------------------------------------------------------
-  // DIMENSION HELPERS
-  // ------------------------------------------------------------
-
-  const dimensionOffset = 45;
+  const path = cPath({ left, right, top, bottom, C, T, mirrored: false });
+  const mirrorPath =
+    type === "I"
+          ? cPath({
+          left: startX,
+          right: startX + B,
+          top,
+          bottom,
+          C,
+          T,
+          mirrored: true,
+        })
+      : "";
 
   return (
-    <section className="border border-gray-300 bg-white">
-
-      {/* HEADER */}
-      <div className="border-b border-gray-300 bg-slate-50 px-6 py-4">
-        <h3 className="font-semibold text-blue-800">
-          Section View
-        </h3>
-      </div>
-
-      {/* DRAWING AREA */}
-      <div className="flex min-h-[500px] items-center justify-center p-6">
-
+    <div className="flex h-full min-h-0 flex-col">
+      <h3 className="mb-1 text-[11px] font-semibold text-blue-900">
+        Section Drawing
+      </h3>
+      <div className="flex min-h-0 flex-1 items-center justify-center border border-slate-300 bg-white">
         <svg
-          width={svgWidth}
-          height={svgHeight}
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-          className="max-w-full"
+          className="h-full max-h-full w-full"
         >
-
-          {/* ================================================= */}
-          {/* ACTUAL CFS MATERIAL */}
-          {/* ================================================= */}
-
+          {type === "I" ? (
+            <path
+              d={mirrorPath}
+              fill="#dbeafe"
+              stroke="#1d4ed8"
+              strokeWidth="1.4"
+              strokeLinejoin="round"
+            />
+          ) : null}
           <path
-            d={sectionPath}
+            d={path}
             fill="#dbeafe"
             stroke="#1d4ed8"
-            strokeWidth="2"
+            strokeWidth="1.4"
             strokeLinejoin="round"
           />
-
-          {/* ================================================= */}
-          {/* WEB DIMENSION */}
-          {/* ================================================= */}
-
-          <line
-            x1={left - dimensionOffset}
-            y1={top}
-            x2={left - dimensionOffset}
-            y2={bottom}
-            stroke="#374151"
-            strokeWidth="1.2"
-          />
-
-          <line
-            x1={left - dimensionOffset - 8}
-            y1={top}
-            x2={left - dimensionOffset + 8}
-            y2={top}
-            stroke="#374151"
-            strokeWidth="1.2"
-          />
-
-          <line
-            x1={left - dimensionOffset - 8}
-            y1={bottom}
-            x2={left - dimensionOffset + 8}
-            y2={bottom}
-            stroke="#374151"
-            strokeWidth="1.2"
-          />
-
+          <text x={left + 6} y={top - 8} fill="#334155" fontSize="10">
+            t = {t} mm
+          </text>
           <text
-            x={left - dimensionOffset - 18}
-            y={(top + bottom) / 2}
-            fill="#111827"
-            fontSize="13"
+            x={(startX + startX + drawWidth) / 2}
+            y={bottom + 16}
             textAnchor="middle"
-            transform={`
-              rotate(
-                -90
-                ${left - dimensionOffset - 18}
-                ${(top + bottom) / 2}
-              )
-            `}
+            fill="#334155"
+            fontSize="10"
+          >
+            {type === "I" ? `${(b * 2).toFixed(1)} mm` : `${b} mm`}
+          </text>
+          <text
+            x={startX - 8}
+            y={(top + bottom) / 2}
+            textAnchor="middle"
+            fill="#334155"
+            fontSize="10"
+            transform={`rotate(-90 ${startX - 8} ${(top + bottom) / 2})`}
           >
             {h} mm
           </text>
-
-          {/* ================================================= */}
-          {/* FLANGE WIDTH DIMENSION */}
-          {/* ================================================= */}
-
-          <line
-            x1={left}
-            y1={bottom + 35}
-            x2={right}
-            y2={bottom + 35}
-            stroke="#374151"
-            strokeWidth="1.2"
-          />
-
-          <line
-            x1={left}
-            y1={bottom + 27}
-            x2={left}
-            y2={bottom + 43}
-            stroke="#374151"
-            strokeWidth="1.2"
-          />
-
-          <line
-            x1={right}
-            y1={bottom + 27}
-            x2={right}
-            y2={bottom + 43}
-            stroke="#374151"
-            strokeWidth="1.2"
-          />
-
-          <text
-            x={(left + right) / 2}
-            y={bottom + 58}
-            fill="#111827"
-            fontSize="13"
-            textAnchor="middle"
-          >
-            {b} mm
-          </text>
-
-          {/* ================================================= */}
-          {/* LIP DIMENSION */}
-          {/* ================================================= */}
-
-          {c > 0 && (
-            <>
-              <line
-                x1={right + 30}
-                y1={top}
-                x2={right + 30}
-                y2={top + C}
-                stroke="#374151"
-                strokeWidth="1.2"
-              />
-
-              <line
-                x1={right + 22}
-                y1={top}
-                x2={right + 38}
-                y2={top}
-                stroke="#374151"
-                strokeWidth="1.2"
-              />
-
-              <line
-                x1={right + 22}
-                y1={top + C}
-                x2={right + 38}
-                y2={top + C}
-                stroke="#374151"
-                strokeWidth="1.2"
-              />
-
-              <text
-                x={right + 50}
-                y={top + C / 2}
-                fill="#111827"
-                fontSize="12"
-                textAnchor="middle"
-                transform={`
-                  rotate(
-                    -90
-                    ${right + 50}
-                    ${top + C / 2}
-                  )
-                `}
-              >
-                {c} mm
-              </text>
-            </>
-          )}
-
-          {/* ================================================= */}
-          {/* THICKNESS LABEL */}
-          {/* ================================================= */}
-
-          <text
-            x={left + 8}
-            y={top - 12}
-            fill="#374151"
-            fontSize="12"
-          >
-            t = {t} mm
-          </text>
-
-          {/* ================================================= */}
-          {/* RADIUS LABEL */}
-          {/* ================================================= */}
-
-          <text
-            x={left}
-            y={bottom + 82}
-            fill="#374151"
-            fontSize="12"
-          >
-            R = {r} mm
-          </text>
-
-          {/* ================================================= */}
-          {/* INSIDE RADIUS LABEL */}
-          {/* ================================================= */}
-
-          {r > 0 && (
-            <text
-              x={left}
-              y={bottom + 100}
-              fill="#6b7280"
-              fontSize="11"
-            >
-              Ri = {Math.max(r - t, 0).toFixed(2)} mm
-            </text>
-          )}
-
         </svg>
-
       </div>
-
-    </section>
+    </div>
   );
 }
-
-export default SectionDrawing;

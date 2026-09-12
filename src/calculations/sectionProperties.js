@@ -186,6 +186,7 @@ export function calculateSectionProperties(section) {
   });
 
   return {
+    success: true,
     area,
     centroidX: xcm,
     centroidY: ycm,
@@ -195,11 +196,174 @@ export function calculateSectionProperties(section) {
     Iy,
     IF_intermediate,
     IF_end,
+    IF: IF_end,
     radius,
     rectangles,
     webLength: w,
     flangeWidth: f,
     lipLength: l,
     thickness: TST,
+    sectionType: "C",
+  };
+}
+
+/**
+ * Built-up I-section = two C-sections fastened back-to-back.
+ * Reuses the existing C-section formulas; does not duplicate them.
+ */
+export function calculateISectionProperties(section) {
+  const cSection = calculateSectionProperties(section);
+
+  if (!cSection) {
+    return null;
+  }
+
+  return {
+    success: true,
+    area: 2 * cSection.area,
+    centroidX: 0,
+    centroidY: cSection.centroidY,
+    Ix: 2 * cSection.Ix,
+    Iy: cSection.IF_end,
+    IF_intermediate: cSection.IF_intermediate,
+    IF_end: cSection.IF_end,
+    IF: cSection.IF_end,
+    webLength: cSection.webLength,
+    flangeWidth: cSection.flangeWidth,
+    lipLength: cSection.lipLength,
+    thickness: cSection.thickness,
+    sectionType: "I",
+    singleC: cSection,
+  };
+}
+
+function parseGridNodes(nodes) {
+  const nodeMap = new Map();
+
+  (nodes || []).forEach((node) => {
+    const id = Number(node.id);
+    const x = Number(node.x);
+    const y = Number(node.y);
+
+    if (!Number.isFinite(id) || !Number.isFinite(x) || !Number.isFinite(y)) {
+      return;
+    }
+
+    nodeMap.set(id, { id, x, y });
+  });
+
+  return nodeMap;
+}
+
+/**
+ * Thin-walled section properties from nodes + edges.
+ * Each edge is a rectangular strip of length L and thickness t.
+ */
+export function calculateGridSectionProperties(nodes, edges) {
+  const nodeMap = parseGridNodes(nodes);
+  const elements = [];
+
+  (edges || []).forEach((edge) => {
+    const start = nodeMap.get(Number(edge.startNode));
+    const end = nodeMap.get(Number(edge.endNode));
+    const t = Number(edge.thickness);
+
+    if (!start || !end || start.id === end.id) {
+      return;
+    }
+
+    if (!Number.isFinite(t) || t <= 0) {
+      return;
+    }
+
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const L = Math.hypot(dx, dy);
+
+    if (L <= 0) {
+      return;
+    }
+
+    const cos = dx / L;
+    const sin = dy / L;
+    const A = L * t;
+
+    elements.push({
+      A,
+      xm: (start.x + end.x) / 2,
+      ym: (start.y + end.y) / 2,
+      L,
+      t,
+      cos,
+      sin,
+    });
+  });
+
+  if (elements.length === 0) {
+    return {
+      success: false,
+      error: "Add at least one valid edge with thickness greater than zero.",
+    };
+  }
+
+  const area = elements.reduce((sum, el) => sum + el.A, 0);
+  const centroidX =
+    elements.reduce((sum, el) => sum + el.A * el.xm, 0) / area;
+  const centroidY =
+    elements.reduce((sum, el) => sum + el.A * el.ym, 0) / area;
+
+  let Ix = 0;
+  let Iy = 0;
+
+  elements.forEach((el) => {
+    const { A, xm, ym, L, t, cos, sin } = el;
+    const IAlong = (t * L ** 3) / 12;
+    const IThick = (L * t ** 3) / 12;
+
+    Ix += IAlong * sin * sin + IThick * cos * cos + A * (ym - centroidY) ** 2;
+    Iy += IAlong * cos * cos + IThick * sin * sin + A * (xm - centroidX) ** 2;
+  });
+
+  const IF_intermediate = Iy;
+  const IF_end = 2 * Iy;
+
+  return {
+    success: true,
+    area,
+    centroidX,
+    centroidY,
+    Ix,
+    Iy,
+    IF_intermediate,
+    IF_end,
+    IF: IF_end,
+    sectionType: "grid",
+    elementCount: elements.length,
+  };
+}
+
+export function calculateSectionFromInputs({
+  method,
+  sectionType,
+  section,
+  nodes,
+  edges,
+}) {
+  if (method === "grid") {
+    return calculateGridSectionProperties(nodes, edges);
+  }
+
+  if (sectionType === "I") {
+    const result = calculateISectionProperties(section);
+    return result || {
+      success: false,
+      error: "Please enter valid I-section dimensions.",
+    };
+  }
+
+  const result = calculateSectionProperties(section);
+  return result || {
+    success: false,
+    error: "Please enter valid C-section dimensions.",
   };
 }
