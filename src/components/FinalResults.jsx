@@ -82,8 +82,6 @@ export default function FinalResults({ result, parameters, sectionResults, stale
         <Item label="GS" value={formatEngineering(parameters.gSheathing)} unit="MPa" />
         <Item label="dC" value={formatNumber(parameters.dC, 3)} unit="mm" />
         <Item label="sC" value={formatNumber(parameters.perimeterSpacing, 0)} unit="mm" />
-        <Item label="Vr,screw" value={formatNumber(parameters.vrSScrew, 0)} unit="N" />
-        <Item label="Vr,pullout" value={formatNumber(parameters.vrPScrew, 0)} unit="N" />
         {sectionResults ? (
           <>
             <Item label="Area" value={formatNumber(sectionResults.area, 1)} unit="mm²" />

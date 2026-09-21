@@ -2,6 +2,7 @@ import { useState } from "react";
 import TopNavigation from "./components/TopNavigation";
 import SectionPropertiesPage from "./components/SectionPropertiesPage";
 import ShearWallParameters from "./components/ShearWallParameters";
+import PlottedView from "./components/PlottedView";
 import { calculateScrewLayout } from "./calculations/screwLayout";
 import { calculateLateralStrength } from "./calculations/lateralStrength";
 import { calculateSectionFromInputs } from "./calculations/sectionProperties";
@@ -10,6 +11,8 @@ const DEFAULT_SECTION = {
   webLength: 92,
   flangeWidth: 41,
   lipLength: 12.7,
+  webThickness: 1.12,
+  flangeThickness: 1.12,
   thickness: 1.12,
 };
 
@@ -70,8 +73,6 @@ function App() {
     perimeterSpacing: 152,
     fieldSpacing: 305,
     horizontalSpacing: 305,
-    vrSScrew: 3256,
-    vrPScrew: 1255,
     numberOfEndCoupledStuds: 2,
     numberOfSingleStuds: 1,
     numberOfIntermediateStuds: 1,
@@ -183,8 +184,6 @@ function App() {
           fuSheathing: parameters.fuSheathing,
           tF: parameters.tF,
           fuSteel: parameters.fuSteel,
-          vrSScrew: parameters.vrSScrew,
-          vrPScrew: parameters.vrPScrew,
         },
         screwLayout: {
           ...screwLayoutResult,
@@ -235,6 +234,25 @@ function App() {
     }
   };
 
+  const screws =
+    result?.screwDetails ||
+    result?.screwLocations ||
+    (() => {
+      try {
+        const layout = calculateScrewLayout({
+          panelHeight: parameters.panelHeight,
+          panelLength: parameters.panelLength,
+          specimenType: parameters.specimenType,
+          perimeterSpacing: parameters.perimeterSpacing,
+          fieldSpacing: parameters.fieldSpacing,
+          horizontalSpacing: parameters.horizontalSpacing,
+        });
+        return layout.success ? layout.screwLocations : [];
+      } catch {
+        return [];
+      }
+    })();
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#e8eef4] text-slate-900">
       <TopNavigation
@@ -243,7 +261,7 @@ function App() {
         onChangeView={setActiveView}
       />
       <main className="min-h-0 flex-1 overflow-hidden">
-        {activeView === "section" ? (
+        {activeView === "section" && (
           <SectionPropertiesPage
             method={method}
             sectionType={sectionType}
@@ -280,7 +298,8 @@ function App() {
               }
             }}
           />
-        ) : (
+        )}
+        {activeView === "sw" && (
           <ShearWallParameters
             parameters={parameters}
             onChange={handleParameterChange}
@@ -291,6 +310,15 @@ function App() {
             error={swError}
             sectionResults={sectionResults}
             onBack={() => setActiveView("section")}
+            onViewPlotted={() => setActiveView("plotted")}
+          />
+        )}
+        {activeView === "plotted" && (
+          <PlottedView
+            screws={screws}
+            parameters={parameters}
+            result={result}
+            onBack={() => setActiveView("sw")}
           />
         )}
       </main>

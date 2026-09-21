@@ -44,18 +44,6 @@ export default function FastenerParametersPanel({ parameters, onChange }) {
           onChange={(value) => onChange("horizontalSpacing", value)}
         />
       ) : null}
-      <CompactField
-        label="Vr,screw"
-        unit="N"
-        value={parameters.vrSScrew}
-        onChange={(value) => onChange("vrSScrew", value)}
-      />
-      <CompactField
-        label="Vr,pullout"
-        unit="N"
-        value={parameters.vrPScrew}
-        onChange={(value) => onChange("vrPScrew", value)}
-      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 {
-  "name": "lse-cfs-swp",
-  "productName": "LSE for CFSSWP",
+  "name": "lse-cfsswp",
+  "productName": "LSE_CFSSWP",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -40,8 +40,8 @@
   },
 
   "build": {
-    "appId": "in.cbri.lseforcfsswp",
-    "productName": "LSE for CFSSWP",
+    "appId": "in.cbri.lsecfsswp",
+    "productName": "LSE_CFSSWP",
 
     "directories": {
       "output": "release"

@@ -50,17 +50,12 @@ export default function SectionResults({ results, error, stale }) {
             />
             <Row
               label="Moment of Inertia (Ix)"
-              value={formatEngineering(results.Ix)}
+              value={formatEngineering(results.Ix, { sciMin: 1e4 })}
               unit="mm⁴"
             />
             <Row
               label="Moment of Inertia (Iy)"
-              value={formatEngineering(results.Iy)}
-              unit="mm⁴"
-            />
-            <Row
-              label="Double End-Stud IF"
-              value={formatEngineering(results.IF_end ?? results.IF)}
+              value={formatEngineering(results.Iy, { sciMin: 1e4 })}
               unit="mm⁴"
             />
           </>

@@ -1,45 +1,284 @@
 /**
- * Calculate geometric properties of a CFS C-section.
+ * sectionProperties.js
  *
- * Geometry:
+ * Unified dynamic section-property calculation engine for Cold-Formed Steel (CFS).
  *
- *      ┌──────────────┐
- *      │              │  ← Top flange + lip
- *      │
- *      │
- *      │              │
- *      └──────────────┘  ← Bottom flange + lip
+ * Core Engineering Methodology:
+ * 1. Geometry is broken into valid non-overlapping area elements (rectangles or thin strips).
+ * 2. Each element has area A_i, centroid (x_i, y_i), and local centroidal inertias (Ix_local, Iy_local).
+ * 3. All constituent elements are fed into calculateGenericSectionProperties(elements).
+ * 4. The generic engine calculates:
+ *      Total Area: A_total = Σ A_i
+ *      Global Centroid: X̄ = Σ(A_i * x_i) / A_total
+ *                       Ȳ = Σ(A_i * y_i) / A_total
+ *      Parallel-Axis Inertias:
+ *                       Ix = Σ [Ix_local + A_i * (y_i - Ȳ)²]
+ *                       Iy = Σ [Iy_local + A_i * (x_i - X̄)²]
  *
- * Intermediate-stud IF  = MATLAB Iy of one C-section
- * Double end-stud IF    = 2 × MATLAB double-C expression
+ * Works dynamically for C-sections, I-sections, Grid Layouts, and arbitrary thin-walled sections.
+ * All intermediate calculations use full JavaScript 64-bit floating-point precision.
  *
  * Units:
- *   Length  = mm
- *   Area    = mm²
- *   Inertia = mm⁴
+ *   Length   = mm
+ *   Area     = mm²
+ *   Inertia  = mm⁴
  */
 
-export function calculateSectionProperties(section) {
+/**
+ * Central generic calculation engine.
+ * Receives an array of geometric area elements and evaluates section properties
+ * using the parallel-axis theorem without intermediate rounding.
+ *
+ * Each element should provide:
+ *   - area: number (> 0)
+ *   - x: number (element centroid X)
+ *   - y: number (element centroid Y)
+ *   - IxLocal: number (element local centroidal Ix)
+ *   - IyLocal: number (element local centroidal Iy)
+ */
+export function calculateGenericSectionProperties(elements) {
+  if (!Array.isArray(elements) || elements.length === 0) {
+    return null;
+  }
+
+  let totalArea = 0;
+  let sumAx = 0;
+  let sumAy = 0;
+
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i];
+    const a = Number(el.area);
+    const x = Number(el.x);
+    const y = Number(el.y);
+
+    if (!Number.isFinite(a) || a <= 0 || !Number.isFinite(x) || !Number.isFinite(y)) {
+      continue;
+    }
+
+    totalArea += a;
+    sumAx += a * x;
+    sumAy += a * y;
+  }
+
+  if (totalArea <= 0 || !Number.isFinite(totalArea)) {
+    return null;
+  }
+
+  const centroidX = sumAx / totalArea;
+  const centroidY = sumAy / totalArea;
+
+  let Ix = 0;
+  let Iy = 0;
+
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i];
+    const a = Number(el.area);
+    const x = Number(el.x);
+    const y = Number(el.y);
+    const IxLocal = Number.isFinite(el.IxLocal) ? Number(el.IxLocal) : 0;
+    const IyLocal = Number.isFinite(el.IyLocal) ? Number(el.IyLocal) : 0;
+
+    if (!Number.isFinite(a) || a <= 0 || !Number.isFinite(x) || !Number.isFinite(y)) {
+      continue;
+    }
+
+    const dy = y - centroidY;
+    const dx = x - centroidX;
+
+    Ix += IxLocal + a * (dy * dy);
+    Iy += IyLocal + a * (dx * dx);
+  }
+
+  return {
+    area: totalArea,
+    centroidX,
+    centroidY,
+    Ix,
+    Iy,
+  };
+}
+
+/**
+ * Builds the 5 non-overlapping rectangular elements for a single C-section.
+ *
+ * Idealized sharp-corner geometry:
+ *   1. Web:           width = t,     height = h
+ *   2. Top flange:    width = b - t, height = t
+ *   3. Bottom flange: width = b - t, height = t
+ *   4. Top lip:       width = t,     height = c
+ *   5. Bottom lip:    width = t,     height = c
+ *
+ * Coordinate reference:
+ *   X = 0 at outer face of web
+ *   Y = 0 at bottom face of bottom flange
+ *
+ * @param {Object} section - { webLength, flangeWidth, lipLength, thickness }
+ * @param {number} [xOffset=0] - optional shift along X
+ * @param {number} [direction=1] - +1 for standard (flanges right), -1 for mirrored (flanges left)
+ * @returns {Array<Object>|null}
+ */
+export function buildCShapeElements(section, xOffset = 0, direction = 1) {
   const h = Number(section.webLength);
   const b = Number(section.flangeWidth);
   const c = Number(section.lipLength);
-  const t = Number(section.thickness);
-  const radius = Number(section.radius) || 0;
+  const tw = Number(section.webThickness ?? section.thickness);
+  const tf = Number(section.flangeThickness ?? section.thickness);
 
   if (
     !Number.isFinite(h) ||
     !Number.isFinite(b) ||
     !Number.isFinite(c) ||
-    !Number.isFinite(t)
+    !Number.isFinite(tw) ||
+    !Number.isFinite(tf)
   ) {
     return null;
   }
 
-  if (h <= 0 || b <= 0 || c < 0 || t <= 0) {
+  if (h <= 0 || b <= 0 || c < 0 || tw <= 0 || tf <= 0) {
     return null;
   }
 
-  if (t >= h || t >= b) {
+  if (tw >= b || (2 * tf) >= h) {
+    return null;
+  }
+
+  // 1. Web: width tw, height h
+  const webX = xOffset + direction * (tw / 2);
+  const webY = h / 2;
+  const web = {
+    name: direction === 1 ? "Web" : "Mirrored Web",
+    width: tw,
+    height: h,
+    area: tw * h,
+    x: webX,
+    y: webY,
+    IxLocal: (tw * Math.pow(h, 3)) / 12,
+    IyLocal: (h * Math.pow(tw, 3)) / 12,
+  };
+
+  // 2. Top Flange: width (b - tw), height tf
+  const flangeW = b - tw;
+  const flangeX = xOffset + direction * (tw + flangeW / 2);
+  const topFlangeY = h - tf / 2;
+  const topFlange = {
+    name: direction === 1 ? "Top Flange" : "Mirrored Top Flange",
+    width: flangeW,
+    height: tf,
+    area: flangeW * tf,
+    x: flangeX,
+    y: topFlangeY,
+    IxLocal: (flangeW * Math.pow(tf, 3)) / 12,
+    IyLocal: (tf * Math.pow(flangeW, 3)) / 12,
+  };
+
+  // 3. Bottom Flange: width (b - tw), height tf
+  const bottomFlangeY = tf / 2;
+  const bottomFlange = {
+    name: direction === 1 ? "Bottom Flange" : "Mirrored Bottom Flange",
+    width: flangeW,
+    height: tf,
+    area: flangeW * tf,
+    x: flangeX,
+    y: bottomFlangeY,
+    IxLocal: (flangeW * Math.pow(tf, 3)) / 12,
+    IyLocal: (tf * Math.pow(flangeW, 3)) / 12,
+  };
+
+  const elements = [web, topFlange, bottomFlange];
+
+  // 4 & 5. Lips (if c > 0)
+  if (c > 0) {
+    const lipThickness = tf;
+    const lipX = xOffset + direction * (b - lipThickness / 2);
+    const topLipY = h - tf - c / 2;
+    const bottomLipY = tf + c / 2;
+
+    const topLip = {
+      name: direction === 1 ? "Top Lip" : "Mirrored Top Lip",
+      width: lipThickness,
+      height: c,
+      area: lipThickness * c,
+      x: lipX,
+      y: topLipY,
+      IxLocal: (lipThickness * Math.pow(c, 3)) / 12,
+      IyLocal: (c * Math.pow(lipThickness, 3)) / 12,
+    };
+
+    const bottomLip = {
+      name: direction === 1 ? "Bottom Lip" : "Mirrored Bottom Lip",
+      width: lipThickness,
+      height: c,
+      area: lipThickness * c,
+      x: lipX,
+      y: bottomLipY,
+      IxLocal: (lipThickness * Math.pow(c, 3)) / 12,
+      IyLocal: (c * Math.pow(lipThickness, 3)) / 12,
+    };
+
+    elements.push(topLip, bottomLip);
+  }
+
+  return elements;
+}
+
+/**
+ * Builds the 10 constituent non-overlapping rectangular elements for a built-up
+ * I-section composed of two C-sections placed back-to-back at their webs (X = 0).
+ *
+ * Right C (direction = +1): extends into X > 0
+ * Left C (direction = -1): extends into X < 0
+ *
+ * @param {Object} section - single C-section parameters
+ * @returns {Array<Object>|null}
+ */
+export function buildIShapeElements(section) {
+  const rightElements = buildCShapeElements(section, 0, 1);
+  const leftElements = buildCShapeElements(section, 0, -1);
+
+  if (!rightElements || !leftElements) {
+    return null;
+  }
+
+  return [...rightElements, ...leftElements];
+}
+
+/**
+ * Calculate geometric properties of a CFS C-section dynamically.
+ * Generates 5 non-overlapping rectangles and passes them to the generic engine.
+ * Also computes the double-C built-up section for downstream frame IF_end.
+ *
+ * @param {Object|Array} sectionOrElements
+ */
+export function calculateSectionProperties(sectionOrElements) {
+  // Support passing an arbitrary element array directly
+  if (Array.isArray(sectionOrElements)) {
+    const generic = calculateGenericSectionProperties(sectionOrElements);
+    if (!generic) return null;
+    return {
+      success: true,
+      ...generic,
+      IF_intermediate: generic.Iy,
+      IF_end: 2 * generic.Iy,
+      IF: 2 * generic.Iy,
+      sectionType: "custom",
+      rectangles: sectionOrElements,
+    };
+  }
+
+  const section = sectionOrElements;
+  if (!section || typeof section !== "object") {
+    return null;
+  }
+
+  const h = Number(section.webLength);
+  const b = Number(section.flangeWidth);
+  const c = Number(section.lipLength);
+  const tw = Number(section.webThickness ?? section.thickness);
+  const tf = Number(section.flangeThickness ?? section.thickness);
+  const radius = Number(section.radius) || 0;
+
+  const rectangles = buildCShapeElements(section, 0, 1);
+  if (!rectangles) {
     return null;
   }
 
@@ -49,191 +288,92 @@ export function calculateSectionProperties(section) {
     );
   }
 
-  const w = h;
-  const f = b;
-  const l = c;
-  const TST = t;
+  const generic = calculateGenericSectionProperties(rectangles);
+  if (!generic) {
+    return null;
+  }
 
-  // --------------------------------------------------------
-  // STUD CALCULATIONS -- same as MATLAB / test03.py
-  // --------------------------------------------------------
-
-  const ta =
-    (2 * (l - TST * 0.5 + f - TST) + w - TST) * TST;
-  const aw = (w - 2 * TST) * TST;
-  const af = f * TST;
-  const al = (l - TST) * TST;
-
-  // Centre of mass -- origin at left bottom corner
-  const xcm =
-    (2 * al * TST * 0.5 + 2 * af * f * 0.5 + aw * (f - TST * 0.5)) /
-    ta;
-
-  const ycm =
-    (
-      af * 0.5 * TST +
-      al * (TST * 3 - l) * 0.5 +
-      aw * w * 0.5 +
-      af * (w - TST * 0.5) +
-      al * (w + 0.5 * TST - l * 1.5)
-    ) / ta;
-
-  // --------------------------------------------------------
-  // MOMENT OF INERTIA OF ONE C-SECTION -- MATLAB Iy
-  // --------------------------------------------------------
-
-  const Iy =
-    (w * f ** 3 / 12.0 + w * f * (f * 0.5 - xcm) ** 2) -
-    (
-      ((f - TST * 2) ** 3 * (w - TST * 2)) / 12.0 +
-      (f - TST * 2) *
-        (w - TST * 2) *
-        ((f - TST * 2) * 0.5 + TST - xcm) ** 2 +
-      ((w - 2 * l) * TST ** 3) / 12.0 +
-      (w - 2 * l) * TST * (TST * 0.5 - xcm) ** 2
-    );
-
-  // --------------------------------------------------------
-  // DOUBLE END-STUD -- exact MATLAB expression
-  // --------------------------------------------------------
-
-  const IF_intermediate = Iy;
-
-  const IF_end =
-    2.0 *
-    (
-      (w * f ** 3 / 12.0 + w * f * (f * 0.5) ** 2) -
-      (
-        ((f - TST * 2) ** 3 * (w - TST * 2)) / 12.0 +
-        (f - TST * 2) *
-          (w - TST * 2) *
-          ((f - TST * 2) * 0.5 + TST) ** 2 +
-        ((w - 2 * l) * TST ** 3) / 12.0 +
-        (w - 2 * l) * TST * (TST * 0.5 - f) ** 2
-      )
-    );
-
-  // --------------------------------------------------------
-  // RECTANGULAR COMPONENTS -- Ix via parallel-axis theorem
-  // --------------------------------------------------------
-
-  const rectangles = [
-    {
-      name: "Web",
-      width: t,
-      height: h,
-      x: t / 2,
-      y: h / 2,
-    },
-    {
-      name: "Top Flange",
-      width: b - t,
-      height: t,
-      x: t + (b - t) / 2,
-      y: h - t / 2,
-    },
-    {
-      name: "Bottom Flange",
-      width: b - t,
-      height: t,
-      x: t + (b - t) / 2,
-      y: t / 2,
-    },
-    {
-      name: "Top Lip",
-      width: t,
-      height: c,
-      x: b - t / 2,
-      y: h - t - c / 2,
-    },
-    {
-      name: "Bottom Lip",
-      width: t,
-      height: c,
-      x: b - t / 2,
-      y: t + c / 2,
-    },
-  ];
-
-  rectangles.forEach((rect) => {
-    rect.area = rect.width * rect.height;
-  });
-
-  const area = rectangles.reduce(
-    (sum, rect) => sum + rect.area,
-    0
-  );
-
-  const centroidXRect =
-    rectangles.reduce(
-      (sum, rect) => sum + rect.area * rect.x,
-      0
-    ) / area;
-
-  const centroidYRect =
-    rectangles.reduce(
-      (sum, rect) => sum + rect.area * rect.y,
-      0
-    ) / area;
-
-  let Ix = 0;
-
-  rectangles.forEach((rect) => {
-    const IxLocal =
-      (rect.width * Math.pow(rect.height, 3)) / 12;
-    const dy = rect.y - centroidYRect;
-    Ix += IxLocal + rect.area * Math.pow(dy, 2);
-  });
+  // Calculate built-up double-C section to obtain exact IF_end dynamically
+  const iElements = buildIShapeElements(section);
+  const iGeneric = iElements ? calculateGenericSectionProperties(iElements) : null;
+  const IF_end = iGeneric ? iGeneric.Iy : 2 * generic.Iy;
+  const IF_intermediate = generic.Iy;
 
   return {
     success: true,
-    area,
-    centroidX: xcm,
-    centroidY: ycm,
-    centroidXRect,
-    centroidYRect,
-    Ix,
-    Iy,
+    area: generic.area,
+    centroidX: generic.centroidX,
+    centroidY: generic.centroidY,
+    centroidXRect: generic.centroidX,
+    centroidYRect: generic.centroidY,
+    Ix: generic.Ix,
+    Iy: generic.Iy,
     IF_intermediate,
     IF_end,
     IF: IF_end,
     radius,
     rectangles,
-    webLength: w,
-    flangeWidth: f,
-    lipLength: l,
-    thickness: TST,
+    webLength: h,
+    flangeWidth: b,
+    lipLength: c,
+    webThickness: tw,
+    flangeThickness: tf,
+    thickness: tf,
     sectionType: "C",
   };
 }
 
 /**
- * Built-up I-section = two C-sections fastened back-to-back.
- * Reuses the existing C-section formulas; does not duplicate them.
+ * Built-up I-section = two C-sections placed back-to-back at the web.
+ *
+ * Dynamically generates all 10 constituent non-overlapping rectangle elements
+ * in a mirrored coordinate system and passes ALL 10 elements to the generic engine.
+ * Centroid and inertias are calculated from the complete geometry, NOT hardcoded.
  */
 export function calculateISectionProperties(section) {
-  const cSection = calculateSectionProperties(section);
-
-  if (!cSection) {
+  if (!section || typeof section !== "object") {
     return null;
   }
 
+  const iElements = buildIShapeElements(section);
+  if (!iElements) {
+    return null;
+  }
+
+  const generic = calculateGenericSectionProperties(iElements);
+  if (!generic) {
+    return null;
+  }
+
+  const singleC = calculateSectionProperties(section);
+
+  const h = Number(section.webLength);
+  const b = Number(section.flangeWidth);
+  const c = Number(section.lipLength);
+  const tw = Number(section.webThickness ?? section.thickness);
+  const tf = Number(section.flangeThickness ?? section.thickness);
+  const radius = Number(section.radius) || 0;
+
   return {
     success: true,
-    area: 2 * cSection.area,
-    centroidX: 0,
-    centroidY: cSection.centroidY,
-    Ix: 2 * cSection.Ix,
-    Iy: cSection.IF_end,
-    IF_intermediate: cSection.IF_intermediate,
-    IF_end: cSection.IF_end,
-    IF: cSection.IF_end,
-    webLength: cSection.webLength,
-    flangeWidth: cSection.flangeWidth,
-    lipLength: cSection.lipLength,
-    thickness: cSection.thickness,
+    area: generic.area,
+    centroidX: generic.centroidX,
+    centroidY: generic.centroidY,
+    Ix: generic.Ix,
+    Iy: generic.Iy,
+    IF_intermediate: singleC ? singleC.IF_intermediate : generic.Iy,
+    IF_end: generic.Iy,
+    IF: generic.Iy,
+    webLength: h,
+    flangeWidth: b,
+    lipLength: c,
+    webThickness: tw,
+    flangeThickness: tf,
+    thickness: tf,
+    radius,
     sectionType: "I",
-    singleC: cSection,
+    singleC,
+    rectangles: iElements,
   };
 }
 
@@ -256,8 +396,36 @@ function parseGridNodes(nodes) {
 }
 
 /**
- * Thin-walled section properties from nodes + edges.
- * Each edge is a rectangular strip of length L and thickness t.
+ * IMPORTANT — GRID JUNCTIONS
+ *
+ * For arbitrary Grid Layout geometry, do not blindly assume that simply
+ * summing L × t for every connected segment always represents the exact
+ * physical area.
+ *
+ * Connected segments may overlap at their junctions.
+ *
+ * The implementation must use a consistent thin-walled idealization.
+ *
+ * For the current version, if the Grid Layout is intended to represent
+ * centerline thin-walled members, document and maintain the centerline-strip
+ * idealization consistently.
+ *
+ * Do not silently mix:
+ * - centerline geometry
+ * - outer-edge geometry
+ * - overlapping full rectangles
+ *
+ * The same geometric convention must be used consistently for:
+ * Area, Centroid, Ix, Iy.
+ *
+ * If the current Grid input represents centerline elements, retain that
+ * convention and do not introduce arbitrary overlap subtraction.
+ *
+ * This should be kept architecturally separate so that exact finite-width
+ * geometry/junction treatment can be introduced later if required.
+ *
+ * @param {Array<Object>} nodes - [{ id, x, y }]
+ * @param {Array<Object>} edges - [{ startNode, endNode, thickness }]
  */
 export function calculateGridSectionProperties(nodes, edges) {
   const nodeMap = parseGridNodes(nodes);
@@ -284,18 +452,36 @@ export function calculateGridSectionProperties(nodes, edges) {
       return;
     }
 
+    const area = L * t;
+    const xm = (start.x + end.x) / 2;
+    const ym = (start.y + end.y) / 2;
+    const theta = Math.atan2(dy, dx);
+
+    const IPerpendicular = (t * Math.pow(L, 3)) / 12;
+    const IParallel = (L * Math.pow(t, 3)) / 12;
+
     const cos = dx / L;
     const sin = dy / L;
-    const A = L * t;
+    const cos2 = cos * cos;
+    const sin2 = sin * sin;
+
+    // Transform local inertias to global axes based on segment angle θ
+    const IxLocal = IPerpendicular * sin2 + IParallel * cos2;
+    const IyLocal = IPerpendicular * cos2 + IParallel * sin2;
 
     elements.push({
-      A,
-      xm: (start.x + end.x) / 2,
-      ym: (start.y + end.y) / 2,
+      area,
+      x: xm,
+      y: ym,
       L,
       t,
+      theta,
       cos,
       sin,
+      IxLocal,
+      IyLocal,
+      startNode: edge.startNode,
+      endNode: edge.endNode,
     });
   });
 
@@ -306,42 +492,37 @@ export function calculateGridSectionProperties(nodes, edges) {
     };
   }
 
-  const area = elements.reduce((sum, el) => sum + el.A, 0);
-  const centroidX =
-    elements.reduce((sum, el) => sum + el.A * el.xm, 0) / area;
-  const centroidY =
-    elements.reduce((sum, el) => sum + el.A * el.ym, 0) / area;
+  const generic = calculateGenericSectionProperties(elements);
+  if (!generic) {
+    return {
+      success: false,
+      error: "Failed to calculate properties from the given grid elements.",
+    };
+  }
 
-  let Ix = 0;
-  let Iy = 0;
-
-  elements.forEach((el) => {
-    const { A, xm, ym, L, t, cos, sin } = el;
-    const IAlong = (t * L ** 3) / 12;
-    const IThick = (L * t ** 3) / 12;
-
-    Ix += IAlong * sin * sin + IThick * cos * cos + A * (ym - centroidY) ** 2;
-    Iy += IAlong * cos * cos + IThick * sin * sin + A * (xm - centroidX) ** 2;
-  });
-
-  const IF_intermediate = Iy;
-  const IF_end = 2 * Iy;
+  const IF_intermediate = generic.Iy;
+  const IF_end = 2 * generic.Iy;
 
   return {
     success: true,
-    area,
-    centroidX,
-    centroidY,
-    Ix,
-    Iy,
+    area: generic.area,
+    centroidX: generic.centroidX,
+    centroidY: generic.centroidY,
+    Ix: generic.Ix,
+    Iy: generic.Iy,
     IF_intermediate,
     IF_end,
     IF: IF_end,
+    thickness: elements[0]?.t ?? null,
     sectionType: "grid",
     elementCount: elements.length,
+    elements,
   };
 }
 
+/**
+ * Dispatcher to calculate section properties based on method / section type.
+ */
 export function calculateSectionFromInputs({
   method,
   sectionType,
@@ -355,15 +536,19 @@ export function calculateSectionFromInputs({
 
   if (sectionType === "I") {
     const result = calculateISectionProperties(section);
-    return result || {
-      success: false,
-      error: "Please enter valid I-section dimensions.",
-    };
+    return (
+      result || {
+        success: false,
+        error: "Please enter valid I-section dimensions.",
+      }
+    );
   }
 
   const result = calculateSectionProperties(section);
-  return result || {
-    success: false,
-    error: "Please enter valid C-section dimensions.",
-  };
+  return (
+    result || {
+      success: false,
+      error: "Please enter valid C-section dimensions.",
+    }
+  );
 }

@@ -13,9 +13,7 @@
  *
  * Vr = min(
  *   Br-sheathing,
- *   Br-steel,
- *   Vr-S-screw,
- *   Vr-P-screw
+ *   Br-steel
  * )
  */
 
@@ -39,12 +37,6 @@
  * @param {number} inputs.fuSteel
  *        Steel tensile strength (MPa)
  *
- * @param {number} inputs.vrSScrew
- *        Screw shear strength (N)
- *
- * @param {number} inputs.vrPScrew
- *        Screw pullout strength (N)
- *
  * @returns {Object}
  */
 export function calculateConnectionStrength(inputs) {
@@ -55,8 +47,6 @@ export function calculateConnectionStrength(inputs) {
     fuSheathing,
     tF,
     fuSteel,
-    vrSScrew,
-    vrPScrew,
   } = inputs;
 
 
@@ -70,8 +60,6 @@ export function calculateConnectionStrength(inputs) {
     fuSheathing,
     tF,
     fuSteel,
-    vrSScrew,
-    vrPScrew,
   ];
 
   const hasInvalidInput = values.some(
@@ -94,8 +82,6 @@ export function calculateConnectionStrength(inputs) {
   const fus = Number(fuSheathing);
   const tf = Number(tF);
   const fu = Number(fuSteel);
-  const shearScrew = Number(vrSScrew);
-  const pulloutScrew = Number(vrPScrew);
 
 
   // ============================================================
@@ -121,36 +107,18 @@ export function calculateConnectionStrength(inputs) {
 
 
   // ============================================================
-  // 3. SCREW SHEAR STRENGTH
-  // ============================================================
-
-  const vrSScrewResult = shearScrew;
-
-
-  // ============================================================
-  // 4. SCREW PULLOUT STRENGTH
-  // ============================================================
-
-  const vrPScrewResult = pulloutScrew;
-
-
-  // ============================================================
   // GOVERNING CONNECTION STRENGTH
   // ============================================================
 
   const strengths = {
     sheathingBearing: brSheathing,
     steelBearing: brSteel,
-    screwShear: vrSScrewResult,
-    screwPullout: vrPScrewResult,
   };
 
 
   const governingStrength = Math.min(
     brSheathing,
-    brSteel,
-    vrSScrewResult,
-    vrPScrewResult
+    brSteel
   );
 
 
@@ -158,17 +126,10 @@ export function calculateConnectionStrength(inputs) {
   // GOVERNING FAILURE MODE
   // ============================================================
 
-  let governingMode = "";
-
-  if (governingStrength === brSheathing) {
-    governingMode = "Sheathing Bearing";
-  } else if (governingStrength === brSteel) {
-    governingMode = "Steel Bearing";
-  } else if (governingStrength === vrSScrewResult) {
-    governingMode = "Screw Shear";
-  } else if (governingStrength === vrPScrewResult) {
-    governingMode = "Screw Pullout";
-  }
+  const governingMode =
+    governingStrength === brSheathing
+      ? "Sheathing Bearing"
+      : "Steel Bearing";
 
 
   // ============================================================
@@ -182,8 +143,6 @@ export function calculateConnectionStrength(inputs) {
     // Individual failure modes
     brSheathing,
     brSteel,
-    vrSScrew: vrSScrewResult,
-    vrPScrew: vrPScrewResult,
 
     // Governing result
     vr: governingStrength,

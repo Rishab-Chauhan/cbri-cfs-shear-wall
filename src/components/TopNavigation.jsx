@@ -21,10 +21,15 @@ export default function TopNavigation({
 
   return (
     <header className="flex h-9 shrink-0 items-center justify-between border-b border-slate-400 bg-slate-100 px-3">
-      <h1 className="text-[13px] font-semibold text-blue-900">
-        CFS Shear Wall Calculator
-      </h1>
-      <nav className="flex items-center gap-1">
+      <div className="flex min-w-0 items-center gap-2">
+        <h1 className="text-[13px] font-bold tracking-tight text-blue-950 whitespace-nowrap">
+          LSE_CFSSWP
+        </h1>
+        <span className="hidden truncate text-[11px] font-medium text-slate-600 md:inline">
+          (Lateral Strength Evaluator for Cold-Formed Steel Sheathed Shear Wall Panel)
+        </span>
+      </div>
+      <nav className="flex shrink-0 items-center gap-1">
         <button
           type="button"
           className={tabClass("section", true)}
@@ -43,6 +48,18 @@ export default function TopNavigation({
           }}
         >
           SW Parameters
+        </button>
+        <button
+          type="button"
+          className={tabClass("plotted", sectionCalculated)}
+          disabled={!sectionCalculated}
+          onClick={() => {
+            if (sectionCalculated) {
+              onChangeView("plotted");
+            }
+          }}
+        >
+          Plotted View
         </button>
       </nav>
     </header>
