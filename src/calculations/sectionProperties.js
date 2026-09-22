@@ -396,47 +396,38 @@ function parseGridNodes(nodes) {
 }
 
 /**
- * IMPORTANT — GRID JUNCTIONS
+ * Converts Grid Layout input into finite-thickness non-overlapping rectangular elements.
  *
- * For arbitrary Grid Layout geometry, do not blindly assume that simply
- * summing L × t for every connected segment always represents the exact
- * physical area.
- *
- * Connected segments may overlap at their junctions.
- *
- * The implementation must use a consistent thin-walled idealization.
- *
- * For the current version, if the Grid Layout is intended to represent
- * centerline thin-walled members, document and maintain the centerline-strip
- * idealization consistently.
- *
- * Do not silently mix:
- * - centerline geometry
- * - outer-edge geometry
- * - overlapping full rectangles
- *
- * The same geometric convention must be used consistently for:
- * Area, Centroid, Ix, Iy.
- *
- * If the current Grid input represents centerline elements, retain that
- * convention and do not introduce arbitrary overlap subtraction.
- *
- * This should be kept architecturally separate so that exact finite-width
- * geometry/junction treatment can be introduced later if required.
+ * Geometric Methodology:
+ * 1. Each input segment between two nodes defines a finite-thickness solid strip.
+ * 2. Joint intersections are resolved without double-counting material:
+ *    - At corner junctions between connected segments, the dominant (longer) segment
+ *      owns the joint corner without truncation.
+ *    - The shorter/connecting segment is trimmed at that end by the dominant segment's thickness.
+ *    - Terminal segments (such as lips with a free end) connecting to an intermediate segment
+ *      (such as a flange) start from the interior face of the intermediate segment (shifted
+ *      inward along their length by the flange thickness), preserving the exact flange width
+ *      and lip height with zero overlap and zero void.
+ * 3. The finite-thickness strip's centroid is accurately positioned in global coordinates,
+ *    including inward perpendicular offset determined by the section profile.
+ * 4. Local inertias (I_perp and I_par) are rotated and transformed into global IxLocal and IyLocal
+ *    for arbitrary segment orientations (horizontal, vertical, diagonal).
+ * 5. All elements are passed to calculateGenericSectionProperties() to compute global area,
+ *    centroid, Ix, and Iy via the parallel-axis theorem.
  *
  * @param {Array<Object>} nodes - [{ id, x, y }]
  * @param {Array<Object>} edges - [{ startNode, endNode, thickness }]
  */
 export function calculateGridSectionProperties(nodes, edges) {
   const nodeMap = parseGridNodes(nodes);
-  const elements = [];
 
-  (edges || []).forEach((edge) => {
-    const start = nodeMap.get(Number(edge.startNode));
-    const end = nodeMap.get(Number(edge.endNode));
+  const validEdges = [];
+  (edges || []).forEach((edge, idx) => {
+    const s = nodeMap.get(Number(edge.startNode));
+    const e = nodeMap.get(Number(edge.endNode));
     const t = Number(edge.thickness);
 
-    if (!start || !end || start.id === end.id) {
+    if (!s || !e || s.id === e.id) {
       return;
     }
 
@@ -444,51 +435,197 @@ export function calculateGridSectionProperties(nodes, edges) {
       return;
     }
 
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
+    const dx = e.x - s.x;
+    const dy = e.y - s.y;
     const L = Math.hypot(dx, dy);
 
     if (L <= 0) {
       return;
     }
 
-    const area = L * t;
-    const xm = (start.x + end.x) / 2;
-    const ym = (start.y + end.y) / 2;
-    const theta = Math.atan2(dy, dx);
+    validEdges.push({
+      index: idx,
+      id: edge.id || (idx + 1),
+      startNode: s.id,
+      endNode: e.id,
+      s,
+      e,
+      t,
+      L,
+      dx,
+      dy,
+      tx: dx / L,
+      ty: dy / L,
+      nx: -dy / L,
+      ny: dx / L,
+    });
+  });
 
-    const IPerpendicular = (t * Math.pow(L, 3)) / 12;
-    const IParallel = (L * Math.pow(t, 3)) / 12;
+  if (validEdges.length === 0) {
+    return {
+      success: false,
+      error: "Add at least one valid edge with thickness greater than zero.",
+    };
+  }
 
-    const cos = dx / L;
-    const sin = dy / L;
+  // Map incident edges per node
+  const nodeIncident = new Map();
+  nodeMap.forEach((n) => nodeIncident.set(n.id, []));
+  validEdges.forEach((edge) => {
+    nodeIncident.get(edge.startNode).push({ edge, isStart: true });
+    nodeIncident.get(edge.endNode).push({ edge, isStart: false });
+  });
+
+  // Structural hierarchy classification:
+  // Primary member (Level 0): Web (longest segment)
+  // Secondary member (Level 1): Flange (connected directly to Web)
+  // Tertiary member (Level 2): Lip / Stiffener (connected to Flange)
+  let maxL = 0;
+  validEdges.forEach((e) => {
+    if (e.L > maxL) maxL = e.L;
+  });
+
+  const edgeLevel = new Map();
+  const queue = [];
+  validEdges.forEach((e) => {
+    if (Math.abs(e.L - maxL) < 1e-4) {
+      edgeLevel.set(e.id, 0);
+      queue.push(e);
+    }
+  });
+
+  while (queue.length > 0) {
+    const curr = queue.shift();
+    const currLevel = edgeLevel.get(curr.id);
+
+    const neighbors = [
+      ...(nodeIncident.get(curr.startNode) || []),
+      ...(nodeIncident.get(curr.endNode) || []),
+    ];
+    for (const nb of neighbors) {
+      if (!edgeLevel.has(nb.edge.id)) {
+        edgeLevel.set(nb.edge.id, currLevel + 1);
+        queue.push(nb.edge);
+      }
+    }
+  }
+
+  const elements = [];
+
+  for (const edge of validEdges) {
+    let trimStart = 0;
+    let trimEnd = 0;
+    let shiftStart = 0;
+    let shiftEnd = 0;
+
+    const sConns = (nodeIncident.get(edge.startNode) || []).filter(
+      (c) => c.edge !== edge
+    );
+    const eConns = (nodeIncident.get(edge.endNode) || []).filter(
+      (c) => c.edge !== edge
+    );
+
+    const isStartFree = sConns.length === 0;
+    const isEndFree = eConns.length === 0;
+    const level = edgeLevel.get(edge.id) || 0;
+
+    // Check start node connection
+    for (const conn of sConns) {
+      const other = conn.edge;
+      const otherLevel = edgeLevel.get(other.id) || 0;
+
+      // Tertiary member (Lip, Level >= 2) with free end connecting to secondary (Flange):
+      // Preserves length c by shifting inside the flange thickness
+      if (isEndFree && level >= 2 && otherLevel < level) {
+        shiftStart = Math.max(shiftStart, other.t);
+      } else {
+        // Flange attached to Web, or closed box, or dominant member:
+        const otherWins =
+          other.L > edge.L ||
+          (Math.abs(other.L - edge.L) < 1e-6 && other.index < edge.index);
+        if (otherWins) {
+          trimStart = Math.max(trimStart, other.t);
+        }
+      }
+    }
+
+    // Check end node connection
+    for (const conn of eConns) {
+      const other = conn.edge;
+      const otherLevel = edgeLevel.get(other.id) || 0;
+
+      if (isStartFree && level >= 2 && otherLevel < level) {
+        shiftEnd = Math.max(shiftEnd, other.t);
+      } else {
+        const otherWins =
+          other.L > edge.L ||
+          (Math.abs(other.L - edge.L) < 1e-6 && other.index < edge.index);
+        if (otherWins) {
+          trimEnd = Math.max(trimEnd, other.t);
+        }
+      }
+    }
+
+    const effectiveLength = edge.L - trimStart - trimEnd;
+    if (effectiveLength <= 0) {
+      continue;
+    }
+
+    // Position along segment centerline:
+    const sAlong =
+      trimStart + shiftStart - shiftEnd + effectiveLength / 2;
+    let cx = edge.s.x + sAlong * edge.tx;
+    let cy = edge.s.y + sAlong * edge.ty;
+
+    // Inward normal determination from connected edges
+    let perpSide = 0;
+    for (const conn of [...sConns, ...eConns]) {
+      const other = conn.edge;
+      const otherDirX = conn.isStart ? other.tx : -other.tx;
+      const otherDirY = conn.isStart ? other.ty : -other.ty;
+      const cross = edge.tx * otherDirY - edge.ty * otherDirX;
+      if (Math.abs(cross) > 0.01) {
+        perpSide += Math.sign(cross);
+      }
+    }
+
+    if (perpSide !== 0) {
+      const sign = Math.sign(perpSide);
+      cx += sign * (edge.t / 2) * edge.nx;
+      cy += sign * (edge.t / 2) * edge.ny;
+    }
+
+    // Local centroidal second moments
+    const IPerpendicular = (edge.t * Math.pow(effectiveLength, 3)) / 12;
+    const IParallel = (effectiveLength * Math.pow(edge.t, 3)) / 12;
+
+    const cos = edge.tx;
+    const sin = edge.ty;
     const cos2 = cos * cos;
     const sin2 = sin * sin;
 
-    // Transform local inertias to global axes based on segment angle θ
+    // Transform local inertias to global coordinate axes
     const IxLocal = IPerpendicular * sin2 + IParallel * cos2;
     const IyLocal = IPerpendicular * cos2 + IParallel * sin2;
 
     elements.push({
-      area,
-      x: xm,
-      y: ym,
-      L,
-      t,
-      theta,
-      cos,
-      sin,
+      name: `Edge_${edge.id}`,
+      area: effectiveLength * edge.t,
+      x: cx,
+      y: cy,
+      L: effectiveLength,
+      t: edge.t,
       IxLocal,
       IyLocal,
       startNode: edge.startNode,
       endNode: edge.endNode,
     });
-  });
+  }
 
   if (elements.length === 0) {
     return {
       success: false,
-      error: "Add at least one valid edge with thickness greater than zero.",
+      error: "Failed to generate valid finite-thickness elements from the given grid edges.",
     };
   }
 
@@ -517,6 +654,7 @@ export function calculateGridSectionProperties(nodes, edges) {
     sectionType: "grid",
     elementCount: elements.length,
     elements,
+    rectangles: elements,
   };
 }
 

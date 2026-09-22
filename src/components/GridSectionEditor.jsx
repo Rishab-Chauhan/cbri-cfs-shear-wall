@@ -33,18 +33,22 @@ export default function GridSectionEditor({
     onGeometryChange();
   };
 
-  const handleRemoveNode = () => {
-    if (nodes.length === 0) {
-      return;
-    }
-    const lastId = nodes[nodes.length - 1].id;
-    onChangeNodes(nodes.slice(0, -1));
-    onChangeEdges(
-      edges.filter(
-        (edge) =>
-          Number(edge.startNode) !== lastId && Number(edge.endNode) !== lastId
-      )
+  const handleDeleteNode = (idToDelete) => {
+    const nextNodes = nodes.filter((node) => node.id !== idToDelete);
+    const nextEdges = edges.filter(
+      (edge) =>
+        Number(edge.startNode) !== idToDelete && Number(edge.endNode) !== idToDelete
     );
+    onChangeNodes(nextNodes);
+    onChangeEdges(nextEdges);
+    onPlot(nextNodes, nextEdges);
+    onGeometryChange();
+  };
+
+  const handleDeleteEdge = (edgeIdToDelete) => {
+    const nextEdges = edges.filter((edge) => edge.id !== edgeIdToDelete);
+    onChangeEdges(nextEdges);
+    onPlot(nodes, nextEdges);
     onGeometryChange();
   };
 
@@ -80,16 +84,6 @@ export default function GridSectionEditor({
     setEdgeError("");
   };
 
-  const handleRemoveEdge = () => {
-    if (edges.length === 0) {
-      return;
-    }
-    const nextEdges = edges.slice(0, -1);
-    onChangeEdges(nextEdges);
-    onPlot(nodes, nextEdges);
-    onGeometryChange();
-  };
-
   return (
     <div className="grid h-full min-h-0 grid-cols-2 gap-2">
       <div className="flex h-full min-h-0 flex-col gap-2">
@@ -98,7 +92,7 @@ export default function GridSectionEditor({
             nodes={nodes}
             onChangeNode={handleChangeNode}
             onAddNode={handleAddNode}
-            onRemoveNode={handleRemoveNode}
+            onDeleteNode={handleDeleteNode}
             onPlot={() => onPlot(nodes, edges)}
           />
         </div>
@@ -110,7 +104,7 @@ export default function GridSectionEditor({
               setDraftEdge((prev) => ({ ...prev, [key]: value }))
             }
             onConnect={handleConnect}
-            onRemoveEdge={handleRemoveEdge}
+            onDeleteEdge={handleDeleteEdge}
             error={edgeError}
           />
         </div>

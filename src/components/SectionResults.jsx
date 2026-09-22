@@ -2,10 +2,10 @@ import { formatEngineering, formatNumber } from "../utils/formatNumber";
 
 function Row({ label, value, unit }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-0.5 last:border-0">
-      <span className="text-[11px] text-slate-600">{label}</span>
-      <span className="font-mono text-[11px] font-medium text-slate-900">
-        {value} {unit}
+    <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 py-1 last:border-0">
+      <span className="text-[13px] font-medium text-slate-600">{label}</span>
+      <span className="font-mono text-[13px] font-semibold text-blue-950">
+        {value} <span className="text-[12px] font-normal text-slate-500">{unit}</span>
       </span>
     </div>
   );
@@ -13,22 +13,22 @@ function Row({ label, value, unit }) {
 
 export default function SectionResults({ results, error, stale }) {
   return (
-    <section className="border border-slate-300 bg-white">
-      <header className="flex items-center justify-between border-b border-slate-300 bg-slate-100 px-2 py-1">
-        <h2 className="text-[11px] font-semibold tracking-wide text-blue-900 uppercase">
+    <section className="border border-slate-300 bg-white shadow-sm">
+      <header className="flex items-center justify-between border-b border-slate-300 bg-slate-100 px-3 py-1.5">
+        <h2 className="text-[12px] font-bold tracking-wide text-blue-900 uppercase">
           Section Properties
         </h2>
         {stale ? (
-          <span className="text-[10px] text-amber-700">
+          <span className="text-[11px] font-medium text-amber-700">
             Geometry changed — recalculate
           </span>
         ) : null}
       </header>
-      <div className="grid grid-cols-2 gap-x-6 px-3 py-1.5">
+      <div className="grid grid-cols-2 gap-x-8 px-4 py-2">
         {error ? (
-          <p className="col-span-2 text-[11px] text-red-700">{error}</p>
+          <p className="col-span-2 text-[12px] text-red-700">{error}</p>
         ) : !results ? (
-          <p className="col-span-2 text-[11px] text-slate-500">
+          <p className="col-span-2 py-1 text-[12px] text-slate-500">
             Calculate section properties to unlock SW Parameters.
           </p>
         ) : (
