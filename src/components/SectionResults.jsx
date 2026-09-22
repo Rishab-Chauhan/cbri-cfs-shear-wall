@@ -5,7 +5,7 @@ function Row({ label, value, unit }) {
     <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 py-1 last:border-0">
       <span className="text-[13px] font-medium text-slate-600">{label}</span>
       <span className="font-mono text-[13px] font-semibold text-blue-950">
-        {value} <span className="text-[12px] font-normal text-slate-500">{unit}</span>
+        {value} <span className="font-mono text-[13px] font-medium text-slate-700">{unit}</span>
       </span>
     </div>
   );

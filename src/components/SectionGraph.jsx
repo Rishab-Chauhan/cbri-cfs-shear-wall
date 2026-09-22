@@ -150,6 +150,7 @@ export default function SectionGraph({ nodes = [], edges = [] }) {
             strokeWidth="1"
           />
 
+          {/* Render edges ending exactly at nodes without extending past outer points */}
           {edges.map((edge) => {
             const start = nodeMap.get(Number(edge.startNode));
             const end = nodeMap.get(Number(edge.endNode));
@@ -157,6 +158,9 @@ export default function SectionGraph({ nodes = [], edges = [] }) {
               return null;
             }
             const t = Number(edge.thickness) || 1;
+            const pxPerMm = innerW / (viewMaxX - viewMinX);
+            const strokeW = Math.max(1.5, t * pxPerMm);
+
             return (
               <line
                 key={edge.id}
@@ -165,8 +169,9 @@ export default function SectionGraph({ nodes = [], edges = [] }) {
                 x2={toX(end.x)}
                 y2={toY(end.y)}
                 stroke="#1d4ed8"
-                strokeWidth={Math.max(1.5, Math.min(t * 1.6, 8))}
-                strokeLinecap="round"
+                strokeWidth={strokeW}
+                strokeLinecap="butt"
+                strokeLinejoin="round"
               />
             );
           })}

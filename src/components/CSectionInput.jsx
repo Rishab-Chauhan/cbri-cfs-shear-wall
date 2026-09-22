@@ -3,6 +3,7 @@ import { CompactField } from "./ui";
 export default function CSectionInput({ section, onChange }) {
   const webT = section.webThickness ?? section.thickness ?? "";
   const flangeT = section.flangeThickness ?? section.thickness ?? "";
+  const lipT = section.lipThickness ?? section.flangeThickness ?? section.thickness ?? "";
 
   const handleWebThicknessChange = (value) => {
     onChange("webThickness", value);
@@ -11,6 +12,10 @@ export default function CSectionInput({ section, onChange }) {
   const handleFlangeThicknessChange = (value) => {
     onChange("flangeThickness", value);
     onChange("thickness", value);
+  };
+
+  const handleLipThicknessChange = (value) => {
+    onChange("lipThickness", value);
   };
 
   return (
@@ -46,6 +51,13 @@ export default function CSectionInput({ section, onChange }) {
         step="0.01"
         value={flangeT}
         onChange={handleFlangeThicknessChange}
+      />
+      <CompactField
+        label="Lip Thickness"
+        unit="mm"
+        step="0.01"
+        value={lipT}
+        onChange={handleLipThicknessChange}
       />
     </div>
   );

@@ -13,6 +13,7 @@ const DEFAULT_SECTION = {
   lipLength: 12.7,
   webThickness: 1.12,
   flangeThickness: 1.12,
+  lipThickness: 1.12,
   thickness: 1.12,
 };
 

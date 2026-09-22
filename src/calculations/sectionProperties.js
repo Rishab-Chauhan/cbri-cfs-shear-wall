@@ -123,18 +123,20 @@ export function buildCShapeElements(section, xOffset = 0, direction = 1) {
   const c = Number(section.lipLength);
   const tw = Number(section.webThickness ?? section.thickness);
   const tf = Number(section.flangeThickness ?? section.thickness);
+  const tl = Number(section.lipThickness ?? section.flangeThickness ?? section.thickness);
 
   if (
     !Number.isFinite(h) ||
     !Number.isFinite(b) ||
     !Number.isFinite(c) ||
     !Number.isFinite(tw) ||
-    !Number.isFinite(tf)
+    !Number.isFinite(tf) ||
+    !Number.isFinite(tl)
   ) {
     return null;
   }
 
-  if (h <= 0 || b <= 0 || c < 0 || tw <= 0 || tf <= 0) {
+  if (h <= 0 || b <= 0 || c < 0 || tw <= 0 || tf <= 0 || (c > 0 && tl <= 0)) {
     return null;
   }
 
@@ -188,7 +190,7 @@ export function buildCShapeElements(section, xOffset = 0, direction = 1) {
 
   // 4 & 5. Lips (if c > 0)
   if (c > 0) {
-    const lipThickness = tf;
+    const lipThickness = tl;
     const lipX = xOffset + direction * (b - lipThickness / 2);
     const topLipY = h - tf - c / 2;
     const bottomLipY = tf + c / 2;
@@ -318,6 +320,7 @@ export function calculateSectionProperties(sectionOrElements) {
     lipLength: c,
     webThickness: tw,
     flangeThickness: tf,
+    lipThickness: Number(section.lipThickness ?? tf),
     thickness: tf,
     sectionType: "C",
   };
@@ -352,6 +355,7 @@ export function calculateISectionProperties(section) {
   const c = Number(section.lipLength);
   const tw = Number(section.webThickness ?? section.thickness);
   const tf = Number(section.flangeThickness ?? section.thickness);
+  const tl = Number(section.lipThickness ?? section.flangeThickness ?? section.thickness);
   const radius = Number(section.radius) || 0;
 
   return {
@@ -369,6 +373,7 @@ export function calculateISectionProperties(section) {
     lipLength: c,
     webThickness: tw,
     flangeThickness: tf,
+    lipThickness: tl,
     thickness: tf,
     radius,
     sectionType: "I",

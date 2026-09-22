@@ -15,12 +15,12 @@ export default function WallParametersPanel({ parameters, onChange }) {
         value={parameters.panelLength}
         onChange={(value) => onChange("panelLength", value)}
       />
-      <CompactField
+      {/* <CompactField
         label="End-coupled studs"
         unit="No."
         value={parameters.numberOfEndCoupledStuds}
         onChange={(value) => onChange("numberOfEndCoupledStuds", value)}
-      />
+      /> */}
       {/* <CompactField
         label="Single studs"
         unit="No."
