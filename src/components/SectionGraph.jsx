@@ -150,7 +150,7 @@ export default function SectionGraph({ nodes = [], edges = [] }) {
             strokeWidth="1"
           />
 
-          {/* Render edges ending exactly at nodes without extending past outer points */}
+          {/* Render edges as exact physical polygons (± t/2 in true mm coordinates) */}
           {edges.map((edge) => {
             const start = nodeMap.get(Number(edge.startNode));
             const end = nodeMap.get(Number(edge.endNode));
@@ -158,21 +158,51 @@ export default function SectionGraph({ nodes = [], edges = [] }) {
               return null;
             }
             const t = Number(edge.thickness) || 1;
-            const pxPerMm = innerW / (viewMaxX - viewMinX);
-            const strokeW = Math.max(1.5, t * pxPerMm);
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const len = Math.hypot(dx, dy);
+            if (len <= 0) return null;
+
+            // Unit normal vector in millimeter coordinates
+            const nx = -dy / len;
+            const ny = dx / len;
+            const halfT = t / 2;
+
+            // 4 exact corners in millimeter coordinates:
+            // exactly (x ± halfT * nx, y ± halfT * ny)
+            const p1 = { x: start.x + halfT * nx, y: start.y + halfT * ny };
+            const p2 = { x: end.x + halfT * nx, y: end.y + halfT * ny };
+            const p3 = { x: end.x - halfT * nx, y: end.y - halfT * ny };
+            const p4 = { x: start.x - halfT * nx, y: start.y - halfT * ny };
+
+            const pointsStr = `${toX(p1.x)},${toY(p1.y)} ${toX(p2.x)},${toY(p2.y)} ${toX(p3.x)},${toY(p3.y)} ${toX(p4.x)},${toY(p4.y)}`;
+
+            const pxPerMm = innerH / (viewMaxY - viewMinY);
+            const showCenterline = t * pxPerMm >= 5;
 
             return (
-              <line
-                key={edge.id}
-                x1={toX(start.x)}
-                y1={toY(start.y)}
-                x2={toX(end.x)}
-                y2={toY(end.y)}
-                stroke="#1d4ed8"
-                strokeWidth={strokeW}
-                strokeLinecap="butt"
-                strokeLinejoin="round"
-              />
+              <g key={edge.id}>
+                {/* Solid physical plate */}
+                <polygon
+                  points={pointsStr}
+                  fill="#2563eb"
+                  stroke="#1d4ed8"
+                  strokeWidth="0.5"
+                />
+                {/* Dashed centerline along the input nodes */}
+                {showCenterline && (
+                  <line
+                    x1={toX(start.x)}
+                    y1={toY(start.y)}
+                    x2={toX(end.x)}
+                    y2={toY(end.y)}
+                    stroke="#ffffff"
+                    strokeWidth="1"
+                    strokeDasharray="3 3"
+                    strokeOpacity="0.75"
+                  />
+                )}
+              </g>
             );
           })}
 

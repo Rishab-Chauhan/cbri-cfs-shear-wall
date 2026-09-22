@@ -10,7 +10,10 @@ export default function NodeTable({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-1 flex items-center justify-between">
-        <h3 className="text-[11px] font-semibold text-blue-900">Nodes</h3>
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-[11px] font-semibold text-blue-900">Nodes</h3>
+          <span className="text-[10px] text-slate-500 font-normal">(Centerline coordinates)</span>
+        </div>
         <div className="flex gap-1">
           <CompactButton onClick={onAddNode}>Add Node</CompactButton>
           <CompactButton variant="primary" onClick={onPlot}>
