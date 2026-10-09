@@ -21,32 +21,32 @@ function SideFields({ prefix, parameters, onChange, calculateModulus }) {
         <option value="Other">Other</option>
       </CompactSelect>
       <CompactField
-        label="tS"
+        label="Thickness (tS)"
         unit="mm"
         step="0.01"
         value={parameters[tKey]}
         onChange={(value) => onChange(tKey, value)}
       />
       <CompactField
-        label="FuS"
+        label="Bearing Strength (FuS)"
         unit="MPa"
         value={parameters[fuKey]}
         onChange={(value) => onChange(fuKey, value)}
       />
       <CompactField
-        label="μ"
+        label="Poisson's Ratio (μ)"
         step="0.001"
         value={parameters[muKey]}
         onChange={(value) => onChange(muKey, value)}
       />
       <ScientificInput
-        label="ES"
+        label="Young's Modulus (ES)"
         unit="MPa"
         value={parameters[eKey]}
         onChange={(value) => calculateModulus(eKey, gKey, muKey, "E", value)}
       />
       <ScientificInput
-        label="GS"
+        label="Shear Modulus (GS)"
         unit="MPa"
         value={parameters[gKey]}
         onChange={(value) => calculateModulus(eKey, gKey, muKey, "G", value)}

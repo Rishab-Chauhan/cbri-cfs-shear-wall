@@ -95,7 +95,7 @@ export default function ScientificInput({
 
   return (
     <label className="flex min-w-0 items-center gap-1.5">
-      <span className="w-[7.5rem] shrink-0 text-[11px] leading-tight text-slate-700">
+      <span className="w-[11.5rem] shrink-0 text-[11px] leading-tight text-slate-700">
         {label}
       </span>
       <input

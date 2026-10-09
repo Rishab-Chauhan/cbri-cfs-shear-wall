@@ -41,37 +41,37 @@ export default function SteelParametersPanel({ parameters, onChange }) {
   return (
     <div className="space-y-1">
       <CompactField
-        label="Fy"
+        label="Yield Strength (Fy)"
         unit="MPa"
         value={parameters.fySteel}
         onChange={(value) => onChange("fySteel", value)}
       />
       <CompactField
-        label="Fu"
+        label="Tensile Strength (Fu)"
         unit="MPa"
         value={parameters.fuSteel}
         onChange={(value) => onChange("fuSteel", value)}
       />
       <ScientificInput
-        label="E (EF)"
+        label="Young's Modulus (Es)"
         unit="MPa"
         value={parameters.eSteel}
         onChange={(value) => updateEG("eSteel", value)}
       />
       <ScientificInput
-        label="G"
+        label="Shear Modulus (G)"
         unit="MPa"
         value={parameters.gSteel}
         onChange={(value) => updateEG("gSteel", value)}
       />
       <CompactField
-        label="μ"
+        label="Poisson's Ratio (μ)"
         value={parameters.poissonRatio}
         step="0.001"
         onChange={(value) => updateEG("poissonRatio", value)}
       />
       <CompactField
-        label="tF"
+        label="Stud Thickness (tF)"
         unit="mm"
         step="0.01"
         value={parameters.tF}
