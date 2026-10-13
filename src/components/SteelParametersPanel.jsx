@@ -1,43 +1,6 @@
 import { CompactField } from "./ui";
-import ScientificInput from "./ScientificInput";
 
 export default function SteelParametersPanel({ parameters, onChange }) {
-  const updateEG = (field, value) => {
-    const mu = Number(parameters.poissonRatio);
-    const numeric = Number(value);
-
-    if (field === "poissonRatio") {
-      const muN = Number(value);
-      const E = Number(parameters.eSteel);
-      const patch = { poissonRatio: value };
-      if (Number.isFinite(muN) && muN > -1 && Number.isFinite(E) && E > 0) {
-        patch.gSteel = Number((E / (2 * (1 + muN))).toFixed(3));
-      }
-      onChange(patch);
-      return;
-    }
-
-    if (!Number.isFinite(mu) || mu <= -1 || !Number.isFinite(numeric) || numeric <= 0) {
-      onChange(field, value);
-      return;
-    }
-
-    if (field === "eSteel") {
-      onChange({
-        eSteel: value,
-        gSteel: Number((numeric / (2 * (1 + mu))).toFixed(3)),
-      });
-      return;
-    }
-
-    if (field === "gSteel") {
-      onChange({
-        gSteel: value,
-        eSteel: Number((2 * numeric * (1 + mu)).toFixed(3)),
-      });
-    }
-  };
-
   return (
     <div className="space-y-1">
       <CompactField
@@ -52,23 +15,11 @@ export default function SteelParametersPanel({ parameters, onChange }) {
         value={parameters.fuSteel}
         onChange={(value) => onChange("fuSteel", value)}
       />
-      <ScientificInput
-        label="Young's Modulus (Es)"
+      <CompactField
+        label="Young's Modulus (EF)"
         unit="MPa"
         value={parameters.eSteel}
-        onChange={(value) => updateEG("eSteel", value)}
-      />
-      <ScientificInput
-        label="Shear Modulus (G)"
-        unit="MPa"
-        value={parameters.gSteel}
-        onChange={(value) => updateEG("gSteel", value)}
-      />
-      <CompactField
-        label="Poisson's Ratio (μ)"
-        value={parameters.poissonRatio}
-        step="0.001"
-        onChange={(value) => updateEG("poissonRatio", value)}
+        onChange={(value) => onChange("eSteel", value)}
       />
       <CompactField
         label="Stud Thickness (tF)"

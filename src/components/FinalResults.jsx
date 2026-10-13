@@ -75,7 +75,6 @@ export default function FinalResults({ result, parameters, sectionResults, stale
         <Item label="Fy" value={formatNumber(parameters.fySteel, 0)} unit="MPa" />
         <Item label="Fu" value={formatNumber(parameters.fuSteel, 0)} unit="MPa" />
         <Item label="E" value={formatEngineering(parameters.eSteel)} unit="MPa" />
-        <Item label="μ" value={formatNumber(parameters.poissonRatio, 2)} />
         <Item label="tS" value={formatNumber(parameters.tS, 1)} unit="mm" />
         <Item label="FuS" value={formatNumber(parameters.fuSheathing, 1)} unit="MPa" />
         <Item label="ES" value={formatEngineering(parameters.eSheathing)} unit="MPa" />

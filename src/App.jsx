@@ -10,7 +10,7 @@ import { calculateSectionFromInputs } from "./calculations/sectionProperties";
 const DEFAULT_SECTION = {
   webLength: 92,
   flangeWidth: 41,
-  lipLength: 12.7,
+  lipLength: 10.5,
   webThickness: 1.12,
   flangeThickness: 1.12,
   lipThickness: 1.12,
@@ -23,15 +23,6 @@ const DEFAULT_NODES = [
   { id: 3, x: 92, y: 41 },
   { id: 4, x: 0, y: 41 },
 ];
-
-function steelG(eSteel, poissonRatio) {
-  const E = Number(eSteel);
-  const mu = Number(poissonRatio);
-  if (!Number.isFinite(E) || !Number.isFinite(mu) || mu <= -1) {
-    return 99509.804;
-  }
-  return Number((E / (2 * (1 + mu))).toFixed(3));
-}
 
 function App() {
   const [activeView, setActiveView] = useState("section");
@@ -52,20 +43,17 @@ function App() {
     fySteel: 230,
     fuSteel: 344,
     eSteel: 203000,
-    gSteel: steelG(203000, 0.02),
+    gSteel: 825,
     tF: 1.12,
-    poissonRatio: 0.02,
     sheathingConfiguration: "single",
-    sheathingMaterial: "FCB",
+    sheathingMaterial: "DFP",
     tS: 12.5,
     fuSheathing: 4.5,
-    sheathingPoissonRatio: 0.02,
     eSheathing: 10445,
     gSheathing: 825,
-    sheathingMaterial2: "FCB",
+    sheathingMaterial2: "DFP",
     tS2: 12.5,
     fuSheathing2: 4.5,
-    sheathingPoissonRatio2: 0.02,
     eSheathing2: 10445,
     gSheathing2: 825,
     screwType: "No. 8",
@@ -152,6 +140,23 @@ function App() {
 
     if (![h, l, perimeter, field].every((v) => Number.isFinite(v) && v > 0)) {
       setSwError("Panel dimensions and screw spacings must be greater than zero.");
+      return;
+    }
+
+    // Validate sheathing inputs
+    const tS = Number(parameters.tS);
+    const fuSheathing = Number(parameters.fuSheathing);
+    const eSheathing = Number(parameters.eSheathing);
+    const gSheathing = Number(parameters.gSheathing);
+
+    const missingSheathing = [];
+    if (!Number.isFinite(tS) || tS <= 0) missingSheathing.push("Thickness (tS)");
+    if (!Number.isFinite(fuSheathing) || fuSheathing <= 0) missingSheathing.push("Bearing Strength (FuS)");
+    if (!Number.isFinite(eSheathing) || eSheathing <= 0) missingSheathing.push("Young's Modulus (ES)");
+    if (!Number.isFinite(gSheathing) || gSheathing <= 0) missingSheathing.push("Shear Modulus (GS)");
+
+    if (missingSheathing.length > 0) {
+      setSwError(`Missing or invalid sheathing property: ${missingSheathing.join(", ")}.`);
       return;
     }
 

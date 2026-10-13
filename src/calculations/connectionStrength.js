@@ -110,12 +110,6 @@ export function calculateConnectionStrength(inputs) {
   // GOVERNING CONNECTION STRENGTH
   // ============================================================
 
-  const strengths = {
-    sheathingBearing: brSheathing,
-    steelBearing: brSteel,
-  };
-
-
   const governingStrength = Math.min(
     brSheathing,
     brSteel

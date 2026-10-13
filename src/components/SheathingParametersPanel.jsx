@@ -1,84 +1,120 @@
 import { CompactField, CompactSelect } from "./ui";
-import ScientificInput from "./ScientificInput";
 
-function SideFields({ prefix, parameters, onChange, calculateModulus }) {
+export const SHEATHING_PRESETS = {
+  DFP: {
+    label: "DFP — Douglas-fir plywood",
+    tS: 12.5,
+    eS: 10445,
+    gS: 825,
+  },
+  CSP: {
+    label: "CSP — Canadian softwood plywood",
+    tS: 12.5,
+    eS: 7376,
+    gS: 497,
+  },
+  OSB: {
+    label: "OSB — Oriented strand board",
+    tS: 11,
+    eS: 9917,
+    gS: 925,
+  },
+  GWB: {
+    label: "GWB — Gypsum wallboard",
+    tS: "", // Not specified in thesis table; user must enter
+    eS: 1290,
+    gS: 561,
+  },
+  Custom: {
+    label: "Custom",
+  },
+};
+
+function SideFields({ prefix, parameters, onChange }) {
   const materialKey = prefix === "2" ? "sheathingMaterial2" : "sheathingMaterial";
   const tKey = prefix === "2" ? "tS2" : "tS";
   const fuKey = prefix === "2" ? "fuSheathing2" : "fuSheathing";
-  const muKey = prefix === "2" ? "sheathingPoissonRatio2" : "sheathingPoissonRatio";
   const eKey = prefix === "2" ? "eSheathing2" : "eSheathing";
   const gKey = prefix === "2" ? "gSheathing2" : "gSheathing";
+
+  const currentMaterial = parameters[materialKey] ?? "Custom";
+
+  const handleMaterialChange = (selectedMaterial) => {
+    if (selectedMaterial === "Custom") {
+      onChange(materialKey, "Custom");
+      return;
+    }
+
+    const preset = SHEATHING_PRESETS[selectedMaterial];
+    if (!preset) {
+      onChange(materialKey, selectedMaterial);
+      return;
+    }
+
+    const patch = {
+      [materialKey]: selectedMaterial,
+      [eKey]: preset.eS,
+      [gKey]: preset.gS,
+    };
+
+    if (preset.tS !== undefined) {
+      patch[tKey] = preset.tS;
+    }
+
+    onChange(patch);
+  };
+
+  const handleFieldChange = (key, value) => {
+    const patch = { [key]: value };
+    if (currentMaterial !== "Custom") {
+      patch[materialKey] = "Custom";
+    }
+    onChange(patch);
+  };
 
   return (
     <div className="space-y-1">
       <CompactSelect
         label="Material"
-        value={parameters[materialKey] ?? "FCB"}
-        onChange={(value) => onChange(materialKey, value)}
+        value={currentMaterial}
+        onChange={handleMaterialChange}
       >
-        <option value="FCB">FCB</option>
-        <option value="CSB">CSB</option>
-        <option value="Other">Other</option>
+        <option value="DFP">DFP — Douglas-fir plywood</option>
+        <option value="CSP">CSP — Canadian softwood plywood</option>
+        <option value="OSB">OSB — Oriented strand board</option>
+        <option value="GWB">GWB — Gypsum wallboard</option>
+        <option value="Custom">Custom</option>
       </CompactSelect>
       <CompactField
         label="Thickness (tS)"
         unit="mm"
         step="0.01"
         value={parameters[tKey]}
-        onChange={(value) => onChange(tKey, value)}
+        onChange={(value) => handleFieldChange(tKey, value)}
       />
       <CompactField
         label="Bearing Strength (FuS)"
         unit="MPa"
         value={parameters[fuKey]}
-        onChange={(value) => onChange(fuKey, value)}
+        onChange={(value) => handleFieldChange(fuKey, value)}
       />
       <CompactField
-        label="Poisson's Ratio (μ)"
-        step="0.001"
-        value={parameters[muKey]}
-        onChange={(value) => onChange(muKey, value)}
-      />
-      <ScientificInput
         label="Young's Modulus (ES)"
         unit="MPa"
         value={parameters[eKey]}
-        onChange={(value) => calculateModulus(eKey, gKey, muKey, "E", value)}
+        onChange={(value) => handleFieldChange(eKey, value)}
       />
-      <ScientificInput
+      <CompactField
         label="Shear Modulus (GS)"
         unit="MPa"
         value={parameters[gKey]}
-        onChange={(value) => calculateModulus(eKey, gKey, muKey, "G", value)}
+        onChange={(value) => handleFieldChange(gKey, value)}
       />
     </div>
   );
 }
 
 export default function SheathingParametersPanel({ parameters, onChange }) {
-  const calculateModulus = (eKey, gKey, muKey, which, value) => {
-    const mu = Number(parameters[muKey]);
-    const numeric = Number(value);
-
-    if (!Number.isFinite(mu) || mu <= -1 || !Number.isFinite(numeric) || numeric <= 0) {
-      onChange(which === "E" ? eKey : gKey, value);
-      return;
-    }
-
-    if (which === "E") {
-      onChange({
-        [eKey]: value,
-        [gKey]: Number((numeric / (2 * (1 + mu))).toFixed(3)),
-      });
-      return;
-    }
-
-    onChange({
-      [gKey]: value,
-      [eKey]: Number((2 * numeric * (1 + mu)).toFixed(3)),
-    });
-  };
-
   return (
     <div className="space-y-1">
       <CompactSelect
@@ -96,7 +132,6 @@ export default function SheathingParametersPanel({ parameters, onChange }) {
         prefix="1"
         parameters={parameters}
         onChange={onChange}
-        calculateModulus={calculateModulus}
       />
       {parameters.sheathingConfiguration === "double" ? (
         <>
@@ -105,7 +140,6 @@ export default function SheathingParametersPanel({ parameters, onChange }) {
             prefix="2"
             parameters={parameters}
             onChange={onChange}
-            calculateModulus={calculateModulus}
           />
         </>
       ) : null}
