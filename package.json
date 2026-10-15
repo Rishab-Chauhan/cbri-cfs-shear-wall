@@ -47,20 +47,19 @@
       "output": "release"
     },
 
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
 
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+    "win": {
+      "target": {
+        "target": "dir",
+        "arch": [
+          "x64"
+        ]
+      }
     }
   }
 }
