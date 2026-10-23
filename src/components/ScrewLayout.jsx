@@ -21,34 +21,26 @@ export default function ScrewLayout({
         </span>
       </header>
 
-      {/* ── Screw plot — fills remaining space above the plan section ── */}
-      <div className="min-h-0 flex-1">
-        {total === 0 ? (
-          <p className="p-2 text-[11px] text-slate-500">
-            Press Calculate to generate the screw layout.
-          </p>
-        ) : (
-          <ScrewPlot
-            screws={screws}
-            panelLength={panelLength}
-            panelHeight={panelHeight}
-          />
-        )}
-      </div>
-
-      {/* ── Plan section — pinned to bottom of this panel ── */}
-      <div className="shrink-0 border-t border-slate-200">
-        <div className="flex items-center justify-between bg-slate-50 px-2 py-0.5">
-          <span className="text-[10px] font-semibold tracking-wide text-blue-800 uppercase">
-            Plan Section — Top View
-          </span>
-          {parameters?.sheathingConfiguration === "double" ? (
-            <span className="text-[9px] text-slate-500">Double-side sheathing</span>
+      {/* ── Drawings area (Screw plot on top + Plan cross-section directly below) ── */}
+      <div className="flex min-h-0 flex-1 flex-col p-2 gap-2">
+        <div className="min-h-0 flex-1">
+          {total === 0 ? (
+            <p className="p-2 text-[11px] text-slate-500">
+              Press Calculate to generate the screw layout.
+            </p>
           ) : (
-            <span className="text-[9px] text-slate-500">Single-side sheathing</span>
+            <ScrewPlot
+              screws={screws}
+              panelLength={panelLength}
+              panelHeight={panelHeight}
+            />
           )}
         </div>
-        <PlanView parameters={parameters} />
+
+        {/* ── Top view cross-section sits directly below the screw plot ── */}
+        <div className="shrink-0">
+          <PlanView parameters={parameters} />
+        </div>
       </div>
     </section>
   );
