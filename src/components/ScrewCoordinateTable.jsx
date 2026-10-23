@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+ import { useMemo } from "react";
 import { calculateCu } from "../calculations/cuStrength";
 
 function formatVal(val, decimals = 2) {

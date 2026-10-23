@@ -10,6 +10,7 @@ export default function PlottedView({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
+      {/* ── Top bar ── */}
       <div className="flex shrink-0 items-center justify-between border border-slate-300 bg-white px-3 py-1.5 shadow-sm">
         <div className="flex items-center gap-4">
           <CompactButton onClick={onBack}>← Back to SW Parameters</CompactButton>
@@ -19,10 +20,14 @@ export default function PlottedView({
           {parameters ? (
             <div className="hidden items-center gap-3 text-[11px] text-slate-600 sm:flex">
               <span>
-                Panel: <strong>{parameters.panelLength} × {parameters.panelHeight} mm</strong>
+                Panel:{" "}
+                <strong>
+                  {parameters.panelLength} × {parameters.panelHeight} mm
+                </strong>
               </span>
               <span>
-                Perimeter Spacing: <strong>{parameters.perimeterSpacing} mm</strong>
+                Perimeter Spacing:{" "}
+                <strong>{parameters.perimeterSpacing} mm</strong>
               </span>
               <span>
                 Field Spacing: <strong>{parameters.fieldSpacing} mm</strong>
@@ -31,16 +36,26 @@ export default function PlottedView({
           ) : null}
         </div>
         <span className="text-[11px] font-medium text-slate-700">
-          Total Screws: <strong className="text-blue-900">{screws.length}</strong>
+          Total Screws:{" "}
+          <strong className="text-blue-900">{screws.length}</strong>
         </span>
       </div>
 
+      {/* ── Two-column layout ── */}
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-2">
+        {/*
+         * Left column: Screw Layout + Plan Section
+         * Both live inside ScrewLayout; the plan section is rendered
+         * at the bottom of that same panel via the `parameters` prop.
+         */}
         <ScrewLayout
           screws={screws}
           panelLength={parameters?.panelLength}
           panelHeight={parameters?.panelHeight}
+          parameters={parameters}
         />
+
+        {/* Right column: Screw Coordinates & J-Calculation Table (unchanged) */}
         <section className="flex min-h-0 flex-col border border-slate-300 bg-white">
           <header className="shrink-0 border-b border-slate-300 bg-slate-100 px-2 py-1">
             <h2 className="text-[11px] font-semibold tracking-wide text-blue-900 uppercase">
