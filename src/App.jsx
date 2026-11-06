@@ -15,6 +15,7 @@ const DEFAULT_SECTION = {
   flangeThickness: 1.12,
   lipThickness: 1.12,
   thickness: 1.12,
+  radius: 0,
 };
 
 const DEFAULT_NODES = [

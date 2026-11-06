@@ -59,6 +59,14 @@ export default function CSectionInput({ section, onChange }) {
         value={lipT}
         onChange={handleLipThicknessChange}
       />
+      <CompactField
+        label="Corner Radius (R)"
+        unit="mm"
+        step="0.01"
+        value={section.radius ?? ""}
+        onChange={(value) => onChange("radius", value)}
+      />
+      <p className="text-[10px] text-slate-500">Inside radius. 0 = sharp corners.</p>
     </div>
   );
 }

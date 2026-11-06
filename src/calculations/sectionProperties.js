@@ -124,6 +124,9 @@ export function buildCShapeElements(section, xOffset = 0, direction = 1) {
   const tw = Number(section.webThickness ?? section.thickness);
   const tf = Number(section.flangeThickness ?? section.thickness);
   const tl = Number(section.lipThickness ?? section.flangeThickness ?? section.thickness);
+  const R = section.radius !== undefined && section.radius !== null && String(section.radius).trim() !== ""
+    ? Number(section.radius)
+    : 0;
 
   if (
     !Number.isFinite(h) ||
@@ -131,100 +134,250 @@ export function buildCShapeElements(section, xOffset = 0, direction = 1) {
     !Number.isFinite(c) ||
     !Number.isFinite(tw) ||
     !Number.isFinite(tf) ||
-    !Number.isFinite(tl)
+    !Number.isFinite(tl) ||
+    !Number.isFinite(R)
   ) {
     return null;
   }
 
-  if (h <= 0 || b <= 0 || c < 0 || tw <= 0 || tf <= 0 || (c > 0 && tl <= 0)) {
+  if (h <= 0 || b <= 0 || c < 0 || tw <= 0 || tf <= 0 || (c > 0 && tl <= 0) || R < 0) {
     return null;
   }
 
-  if (tw >= b || (2 * tf) >= h) {
+  // Sharp corners (R === 0)
+  if (R === 0) {
+    if (tw >= b || (2 * tf) >= h) {
+      return null;
+    }
+
+    // 1. Web: width tw, height h
+    const webX = xOffset + direction * (tw / 2);
+    const webY = h / 2;
+    const web = {
+      name: direction === 1 ? "Web" : "Mirrored Web",
+      width: tw,
+      height: h,
+      area: tw * h,
+      x: webX,
+      y: webY,
+      IxLocal: (tw * Math.pow(h, 3)) / 12,
+      IyLocal: (h * Math.pow(tw, 3)) / 12,
+    };
+
+    // 2. Top Flange: width (b - tw), height tf
+    const flangeW = b - tw;
+    const flangeX = xOffset + direction * (tw + flangeW / 2);
+    const topFlangeY = h - tf / 2;
+    const topFlange = {
+      name: direction === 1 ? "Top Flange" : "Mirrored Top Flange",
+      width: flangeW,
+      height: tf,
+      area: flangeW * tf,
+      x: flangeX,
+      y: topFlangeY,
+      IxLocal: (flangeW * Math.pow(tf, 3)) / 12,
+      IyLocal: (tf * Math.pow(flangeW, 3)) / 12,
+    };
+
+    // 3. Bottom Flange: width (b - tw), height tf
+    const bottomFlangeY = tf / 2;
+    const bottomFlange = {
+      name: direction === 1 ? "Bottom Flange" : "Mirrored Bottom Flange",
+      width: flangeW,
+      height: tf,
+      area: flangeW * tf,
+      x: flangeX,
+      y: bottomFlangeY,
+      IxLocal: (flangeW * Math.pow(tf, 3)) / 12,
+      IyLocal: (tf * Math.pow(flangeW, 3)) / 12,
+    };
+
+    const elements = [web, topFlange, bottomFlange];
+
+    // 4 & 5. Lips (if c > 0)
+    if (c > 0) {
+      const lipThickness = tl;
+      const lipX = xOffset + direction * (b - lipThickness / 2);
+      const topLipY = h - tf - c / 2;
+      const bottomLipY = tf + c / 2;
+
+      const topLip = {
+        name: direction === 1 ? "Top Lip" : "Mirrored Top Lip",
+        width: lipThickness,
+        height: c,
+        area: lipThickness * c,
+        x: lipX,
+        y: topLipY,
+        IxLocal: (lipThickness * Math.pow(c, 3)) / 12,
+        IyLocal: (c * Math.pow(lipThickness, 3)) / 12,
+      };
+
+      const bottomLip = {
+        name: direction === 1 ? "Bottom Lip" : "Mirrored Bottom Lip",
+        width: lipThickness,
+        height: c,
+        area: lipThickness * c,
+        x: lipX,
+        y: bottomLipY,
+        IxLocal: (lipThickness * Math.pow(c, 3)) / 12,
+        IyLocal: (c * Math.pow(lipThickness, 3)) / 12,
+      };
+
+      elements.push(topLip, bottomLip);
+    }
+
+    return elements;
+  }
+
+  // Rounded corners (R > 0)
+  const tb_w = (tw + tf) / 2;
+  const kw = R + tb_w;
+  const webFlatH = h - 2 * kw;
+
+  const hasLip = c > 0;
+  const tb_l = hasLip ? (tf + tl) / 2 : 0;
+  const kl = hasLip ? R + tb_l : 0;
+
+  const flangeFlatW = hasLip ? (b - kw - kl) : (b - kw);
+  const lipFlatD = hasLip ? (c + tf - kl) : 0;
+
+  // Flats validation: web and flange must be > 0, lip flat d must be >= 0 (and if lipped, d >= 0)
+  if (webFlatH <= 0 || flangeFlatW <= 0 || (hasLip && lipFlatD < 0)) {
     return null;
   }
 
-  // 1. Web: width tw, height h
-  const webX = xOffset + direction * (tw / 2);
-  const webY = h / 2;
-  const web = {
-    name: direction === 1 ? "Web" : "Mirrored Web",
+  const elements = [];
+
+  // Helper to add element with direction & offset applied to x
+  const addElem = (elem) => {
+    elements.push({
+      ...elem,
+      x: xOffset + direction * elem.x,
+    });
+  };
+
+  // 1. Web flat: x in [0, tw], y in [kw, h - kw]
+  addElem({
+    name: direction === 1 ? "Web Flat" : "Mirrored Web Flat",
     width: tw,
-    height: h,
-    area: tw * h,
-    x: webX,
-    y: webY,
-    IxLocal: (tw * Math.pow(h, 3)) / 12,
-    IyLocal: (h * Math.pow(tw, 3)) / 12,
-  };
+    height: webFlatH,
+    area: tw * webFlatH,
+    x: tw / 2,
+    y: h / 2,
+    IxLocal: (tw * Math.pow(webFlatH, 3)) / 12,
+    IyLocal: (webFlatH * Math.pow(tw, 3)) / 12,
+  });
 
-  // 2. Top Flange: width (b - tw), height tf
-  const flangeW = b - tw;
-  const flangeX = xOffset + direction * (tw + flangeW / 2);
-  const topFlangeY = h - tf / 2;
-  const topFlange = {
-    name: direction === 1 ? "Top Flange" : "Mirrored Top Flange",
-    width: flangeW,
+  // 2. Flange flats:
+  // Bottom flange flat: x from kw to kw + flangeFlatW, y in [0, tf]
+  addElem({
+    name: direction === 1 ? "Bottom Flange Flat" : "Mirrored Bottom Flange Flat",
+    width: flangeFlatW,
     height: tf,
-    area: flangeW * tf,
-    x: flangeX,
-    y: topFlangeY,
-    IxLocal: (flangeW * Math.pow(tf, 3)) / 12,
-    IyLocal: (tf * Math.pow(flangeW, 3)) / 12,
-  };
+    area: flangeFlatW * tf,
+    x: kw + flangeFlatW / 2,
+    y: tf / 2,
+    IxLocal: (flangeFlatW * Math.pow(tf, 3)) / 12,
+    IyLocal: (tf * Math.pow(flangeFlatW, 3)) / 12,
+  });
 
-  // 3. Bottom Flange: width (b - tw), height tf
-  const bottomFlangeY = tf / 2;
-  const bottomFlange = {
-    name: direction === 1 ? "Bottom Flange" : "Mirrored Bottom Flange",
-    width: flangeW,
+  // Top flange flat: x from kw to kw + flangeFlatW, y in [h - tf, h]
+  addElem({
+    name: direction === 1 ? "Top Flange Flat" : "Mirrored Top Flange Flat",
+    width: flangeFlatW,
     height: tf,
-    area: flangeW * tf,
-    x: flangeX,
-    y: bottomFlangeY,
-    IxLocal: (flangeW * Math.pow(tf, 3)) / 12,
-    IyLocal: (tf * Math.pow(flangeW, 3)) / 12,
-  };
+    area: flangeFlatW * tf,
+    x: kw + flangeFlatW / 2,
+    y: h - tf / 2,
+    IxLocal: (flangeFlatW * Math.pow(tf, 3)) / 12,
+    IyLocal: (tf * Math.pow(flangeFlatW, 3)) / 12,
+  });
 
-  const elements = [web, topFlange, bottomFlange];
+  // 3. Web-flange arcs:
+  const rw = R + tb_w / 2;
+  const cw = (2 / Math.PI) * rw;
+  const arcAreaW = (Math.PI / 2) * rw * tb_w;
+  const arcIlocalW = (Math.PI / 4 - 2 / Math.PI) * Math.pow(rw, 3) * tb_w;
 
-  // 4 & 5. Lips (if c > 0)
-  if (c > 0) {
-    const lipThickness = tl;
-    const lipX = xOffset + direction * (b - lipThickness / 2);
-    const topLipY = h - tf - c / 2;
-    const bottomLipY = tf + c / 2;
+  // Bottom web-flange arc: centre (kw, kw), centroid (kw - cw, kw - cw)
+  addElem({
+    name: direction === 1 ? "Bottom Web Arc" : "Mirrored Bottom Web Arc",
+    area: arcAreaW,
+    x: kw - cw,
+    y: kw - cw,
+    IxLocal: arcIlocalW,
+    IyLocal: arcIlocalW,
+  });
 
-    const topLip = {
-      name: direction === 1 ? "Top Lip" : "Mirrored Top Lip",
-      width: lipThickness,
-      height: c,
-      area: lipThickness * c,
-      x: lipX,
-      y: topLipY,
-      IxLocal: (lipThickness * Math.pow(c, 3)) / 12,
-      IyLocal: (c * Math.pow(lipThickness, 3)) / 12,
-    };
+  // Top web-flange arc: centre (kw, h - kw), centroid (kw - cw, h - kw + cw)
+  addElem({
+    name: direction === 1 ? "Top Web Arc" : "Mirrored Top Web Arc",
+    area: arcAreaW,
+    x: kw - cw,
+    y: h - kw + cw,
+    IxLocal: arcIlocalW,
+    IyLocal: arcIlocalW,
+  });
 
-    const bottomLip = {
-      name: direction === 1 ? "Bottom Lip" : "Mirrored Bottom Lip",
-      width: lipThickness,
-      height: c,
-      area: lipThickness * c,
-      x: lipX,
-      y: bottomLipY,
-      IxLocal: (lipThickness * Math.pow(c, 3)) / 12,
-      IyLocal: (c * Math.pow(lipThickness, 3)) / 12,
-    };
+  // 4. Lip flats and flange-lip arcs (if lipped)
+  if (hasLip) {
+    if (lipFlatD > 0) {
+      // Bottom lip flat: x in [b - tl, b], y in [kl, kl + lipFlatD]
+      addElem({
+        name: direction === 1 ? "Bottom Lip Flat" : "Mirrored Bottom Lip Flat",
+        width: tl,
+        height: lipFlatD,
+        area: tl * lipFlatD,
+        x: b - tl / 2,
+        y: kl + lipFlatD / 2,
+        IxLocal: (tl * Math.pow(lipFlatD, 3)) / 12,
+        IyLocal: (lipFlatD * Math.pow(tl, 3)) / 12,
+      });
 
-    elements.push(topLip, bottomLip);
+      // Top lip flat: x in [b - tl, b], y in [h - kl - lipFlatD, h - kl]
+      addElem({
+        name: direction === 1 ? "Top Lip Flat" : "Mirrored Top Lip Flat",
+        width: tl,
+        height: lipFlatD,
+        area: tl * lipFlatD,
+        x: b - tl / 2,
+        y: h - kl - lipFlatD / 2,
+        IxLocal: (tl * Math.pow(lipFlatD, 3)) / 12,
+        IyLocal: (lipFlatD * Math.pow(tl, 3)) / 12,
+      });
+    }
+
+    const rl = R + tb_l / 2;
+    const cl = (2 / Math.PI) * rl;
+    const arcAreaL = (Math.PI / 2) * rl * tb_l;
+    const arcIlocalL = (Math.PI / 4 - 2 / Math.PI) * Math.pow(rl, 3) * tb_l;
+
+    // Bottom flange-lip arc: centre (b - kl, kl), centroid (b - kl + cl, kl - cl)
+    addElem({
+      name: direction === 1 ? "Bottom Lip Arc" : "Mirrored Bottom Lip Arc",
+      area: arcAreaL,
+      x: b - kl + cl,
+      y: kl - cl,
+      IxLocal: arcIlocalL,
+      IyLocal: arcIlocalL,
+    });
+
+    // Top flange-lip arc: centre (b - kl, h - kl), centroid (b - kl + cl, h - kl + cl)
+    addElem({
+      name: direction === 1 ? "Top Lip Arc" : "Mirrored Top Lip Arc",
+      area: arcAreaL,
+      x: b - kl + cl,
+      y: h - kl + cl,
+      IxLocal: arcIlocalL,
+      IyLocal: arcIlocalL,
+    });
   }
 
   return elements;
 }
 
 /**
- * Builds the 10 constituent non-overlapping rectangular elements for a built-up
+ * Builds the constituent non-overlapping elements for a built-up
  * I-section composed of two C-sections placed back-to-back at their webs (X = 0).
  *
  * Right C (direction = +1): extends into X > 0
@@ -246,7 +399,7 @@ export function buildIShapeElements(section) {
 
 /**
  * Calculate geometric properties of a CFS C-section dynamically.
- * Generates 5 non-overlapping rectangles and passes them to the generic engine.
+ * Generates non-overlapping rectangles and arcs and passes them to the generic engine.
  * Also computes the double-C built-up section for downstream frame IF_end.
  *
  * @param {Object|Array} sectionOrElements
@@ -277,17 +430,13 @@ export function calculateSectionProperties(sectionOrElements) {
   const c = Number(section.lipLength);
   const tw = Number(section.webThickness ?? section.thickness);
   const tf = Number(section.flangeThickness ?? section.thickness);
-  const radius = Number(section.radius) || 0;
+  const radius = section.radius !== undefined && section.radius !== null && String(section.radius).trim() !== ""
+    ? Number(section.radius)
+    : 0;
 
   const rectangles = buildCShapeElements(section, 0, 1);
   if (!rectangles) {
     return null;
-  }
-
-  if (radius !== 0) {
-    console.warn(
-      "Corner radius is currently not included in the section property calculation."
-    );
   }
 
   const generic = calculateGenericSectionProperties(rectangles);
@@ -356,7 +505,9 @@ export function calculateISectionProperties(section) {
   const tw = Number(section.webThickness ?? section.thickness);
   const tf = Number(section.flangeThickness ?? section.thickness);
   const tl = Number(section.lipThickness ?? section.flangeThickness ?? section.thickness);
-  const radius = Number(section.radius) || 0;
+  const radius = section.radius !== undefined && section.radius !== null && String(section.radius).trim() !== ""
+    ? Number(section.radius)
+    : 0;
 
   return {
     success: true,
@@ -677,12 +828,44 @@ export function calculateSectionFromInputs({
     return calculateGridSectionProperties(nodes, edges);
   }
 
+  // Check if radius specifically caused dimensions to become non-positive
+  const isRadiusTooLarge = () => {
+    if (!section || typeof section !== "object") return false;
+    const R = section.radius !== undefined && section.radius !== null && String(section.radius).trim() !== ""
+      ? Number(section.radius)
+      : 0;
+    if (R <= 0) return false;
+    const h = Number(section.webLength);
+    const b = Number(section.flangeWidth);
+    const c = Number(section.lipLength);
+    const tw = Number(section.webThickness ?? section.thickness);
+    const tf = Number(section.flangeThickness ?? section.thickness);
+    const tl = Number(section.lipThickness ?? section.flangeThickness ?? section.thickness);
+    // If base dimensions are valid under R = 0
+    if (h > 0 && b > 0 && c >= 0 && tw > 0 && tf > 0 && (c === 0 || tl > 0) && tw < b && 2 * tf < h) {
+      const tb_w = (tw + tf) / 2;
+      const kw = R + tb_w;
+      const webFlatH = h - 2 * kw;
+      const hasLip = c > 0;
+      const tb_l = hasLip ? (tf + tl) / 2 : 0;
+      const kl = hasLip ? R + tb_l : 0;
+      const flangeFlatW = hasLip ? (b - kw - kl) : (b - kw);
+      const lipFlatD = hasLip ? (c + tf - kl) : 0;
+      if (webFlatH <= 0 || flangeFlatW <= 0 || (hasLip && lipFlatD < 0)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const radiusError = isRadiusTooLarge() ? "Corner radius too large for the given dimensions." : null;
+
   if (sectionType === "I") {
     const result = calculateISectionProperties(section);
     return (
       result || {
         success: false,
-        error: "Please enter valid I-section dimensions.",
+        error: radiusError || "Please enter valid I-section dimensions.",
       }
     );
   }
@@ -691,7 +874,7 @@ export function calculateSectionFromInputs({
   return (
     result || {
       success: false,
-      error: "Please enter valid C-section dimensions.",
+      error: radiusError || "Please enter valid C-section dimensions.",
     }
   );
 }

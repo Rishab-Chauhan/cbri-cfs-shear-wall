@@ -1,3 +1,4 @@
+/* global process */
 import {
   calculateGenericSectionProperties,
   calculateSectionProperties,
@@ -180,6 +181,90 @@ assertClose('Centroid X', diagGrid.centroidX, 50);
 assertClose('Centroid Y', diagGrid.centroidY, 50);
 assertClose('Ix', diagGrid.Ix, expectedDiagIx);
 assertClose('Iy', diagGrid.Iy, expectedDiagIy);
+
+// ------------------------------------------------------------------------
+// TEST 6: BOOK 7.6.3 LIPPED CHANNEL (Unit-agnostic, R = 0.125)
+// ------------------------------------------------------------------------
+console.log('\n--- TEST 6: Book 7.6.3 Lipped Channel (Web=4, Flange=3, Lip=0.565, t=0.06, R=0.125) ---');
+const book6Sec = {
+  webLength: 4,
+  flangeWidth: 3,
+  lipLength: 0.565,
+  thickness: 0.06,
+  radius: 0.125,
+};
+const book6 = calculateSectionProperties(book6Sec);
+const tolBook = 0.002; // 0.2% tolerance
+
+assertClose('Area', book6.area, 0.6446, tolBook);
+assertClose('Centroid X', book6.centroidX, 1.1237, tolBook);
+assertClose('Ix', book6.Ix, 1.8134, tolBook);
+assertClose('Iy', book6.Iy, 0.7924, tolBook);
+
+// ------------------------------------------------------------------------
+// TEST 7: BOOK 7.6.2 UNLIPPED CHANNEL (Unit-agnostic, R = 0.125)
+// ------------------------------------------------------------------------
+console.log('\n--- TEST 7: Book 7.6.2 Unlipped Channel (Web=6, Flange=2, Lip=0, t=0.125, R=0.125) ---');
+const book7Sec = {
+  webLength: 6,
+  flangeWidth: 2,
+  lipLength: 0,
+  thickness: 0.125,
+  radius: 0.125,
+};
+const book7 = calculateSectionProperties(book7Sec);
+
+assertClose('Area', book7.area, 1.1986, tolBook);
+assertClose('Centroid X', book7.centroidX, 0.4545, tolBook);
+assertClose('Ix', book7.Ix, 6.1153, tolBook);
+assertClose('Iy', book7.Iy, 0.4228, tolBook);
+
+// ------------------------------------------------------------------------
+// TEST 8: DEFAULT APP C (Web=92, Flange=41, Lip=10.5, t=1.12, R=2.0 mm)
+// ------------------------------------------------------------------------
+console.log('\n--- TEST 8: Default App C (Web=92, Flange=41, Lip=10.5, t=1.12, R=2.0) ---');
+const app8Sec = {
+  webLength: 92,
+  flangeWidth: 41,
+  lipLength: 10.5,
+  thickness: 1.12,
+  radius: 2.0,
+};
+const app8 = calculateSectionProperties(app8Sec);
+
+assertClose('Area', app8.area, 210.969, 1e-3);
+assertClose('Centroid X', app8.centroidX, 13.221, 1e-3);
+assertClose('Centroid Y', app8.centroidY, 46.0, 1e-3);
+assertClose('Ix', app8.Ix, 283876.4, 0.5);
+assertClose('Iy', app8.Iy, 48956.5, 0.5);
+
+// ------------------------------------------------------------------------
+// TEST 9: BUILT-UP I-SECTION (Same section, R = 2.0 mm)
+// ------------------------------------------------------------------------
+console.log('\n--- TEST 9: Built-up I-Section (Web=92, Flange=41, Lip=10.5, t=1.12, R=2.0) ---');
+const app9 = calculateISectionProperties(app8Sec);
+
+assertClose('Area', app9.area, 421.937, 1e-3);
+assertClose('Centroid X', app9.centroidX, 0, 1e-6);
+assertClose('Ix', app9.Ix, 567752.8, 0.5);
+assertClose('Iy', app9.Iy, 171667.5, 0.5);
+
+// ------------------------------------------------------------------------
+// TEST 10: REGRESSION TEST (Radius = 0 gives current results bit-for-bit)
+// ------------------------------------------------------------------------
+console.log('\n--- TEST 10: Regression (Web=92, Flange=41, Lip=10.5, t=1.12, R=0) ---');
+const app10Sec = {
+  webLength: 92,
+  flangeWidth: 41,
+  lipLength: 10.5,
+  thickness: 1.12,
+  radius: 0,
+};
+const app10 = calculateSectionProperties(app10Sec);
+
+assertClose('Area', app10.area, 215.891, 1e-3);
+assertClose('Ix', app10.Ix, 294292.5, 0.5);
+assertClose('Iy', app10.Iy, 51278.9, 0.5);
 
 console.log('\n========================================================================');
 console.log(`ALL TESTS RESULT: ${allPassed ? 'ALL PASSED SUCCESSFULLY ✓' : 'SOME TESTS FAILED ✗'}`);
